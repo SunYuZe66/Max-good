@@ -1,0 +1,4608 @@
+<!DOCTYPE html><html data-framework="game" lang="zh-CN"><head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>打怪升级</title>
+<!-- 单文件版：CSS/JS 已内联，进化Boss 为两阶段机制。图片素材走网络地址，联网运行效果最佳 -->
+  <style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+html, body {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: #1a1030;
+  font-family: system-ui, -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+  color: #fff;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+#app {
+  position: relative;
+  width: 100%;
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
+}
+
+.stage-wrap {
+  position: absolute;
+  inset: 0;
+}
+
+.stage {
+  display: block;
+  width: 100%;
+  height: 100%;
+  touch-action: none;
+}
+
+/* ---------- HUD ---------- */
+.hud {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding: 12px 14px;
+  pointer-events: none;
+  z-index: 5;
+}
+
+.hud-left {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 42%;
+}
+
+.hp-row, .exp-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.hud-label {
+  font-size: 13px;
+  font-weight: 700;
+  width: 30px;
+  text-shadow: 0 1px 3px rgba(0,0,0,0.8);
+}
+
+.hp-bar, .exp-bar {
+  flex: 1;
+  height: 14px;
+  border-radius: 7px;
+  background: rgba(0,0,0,0.45);
+  border: 1px solid rgba(255,255,255,0.25);
+  overflow: hidden;
+}
+
+.hp-fill {
+  height: 100%;
+  width: 100%;
+  background: linear-gradient(90deg, #ff5a5a, #ff9a5a);
+  transition: width 0.2s;
+}
+
+.exp-fill {
+  height: 100%;
+  width: 0%;
+  background: linear-gradient(90deg, #4ad9ff, #6ee7ff);
+  transition: width 0.2s;
+}
+
+.hud-right {
+  display: flex;
+  gap: 10px;
+}
+
+/* ---------- 第 2、3 关击杀进度 HUD ---------- */
+.stage-progress {
+  position: absolute;
+  top: 64px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 6;
+  pointer-events: none;
+  font-size: 14px;
+  font-weight: 800;
+  color: #ffd24a;
+  text-shadow: 0 2px 8px rgba(0,0,0,0.7);
+  background: rgba(0,0,0,0.45);
+  border: 1px solid rgba(255,210,80,0.5);
+  border-radius: 12px;
+  padding: 6px 14px;
+}
+
+.stage-progress.hidden { display: none; }
+.stage-progress b { color: #fff; }
+
+/* ---------- Boss HUD ---------- */
+.boss-hud {
+  position: absolute;
+  top: 64px;
+  left: 14px;
+  right: 14px;
+  z-index: 6;
+  pointer-events: none;
+}
+
+.boss-hud.hidden { display: none; }
+
+.boss-name {
+  font-size: 18px;
+  font-weight: 900;
+  letter-spacing: 2px;
+  color: #ff9ae6;
+  text-shadow: 0 2px 8px rgba(120,20,90,0.7);
+  margin-bottom: 4px;
+}
+
+.boss-bar {
+  height: 16px;
+  border-radius: 8px;
+  background: rgba(0,0,0,0.55);
+  border: 1px solid rgba(255,150,230,0.5);
+  overflow: hidden;
+}
+
+.boss-fill {
+  height: 100%;
+  width: 100%;
+  background: linear-gradient(90deg, #ff5ad0, #b58cff);
+  transition: width 0.15s linear;
+}
+
+.stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 48px;
+  padding: 4px 8px;
+  background: rgba(0,0,0,0.45);
+  border: 1px solid rgba(255,255,255,0.2);
+  border-radius: 10px;
+}
+
+.stat-num {
+  font-size: 18px;
+  font-weight: 800;
+  line-height: 1.1;
+  color: #ffd24a;
+}
+
+.stat-label {
+  font-size: 11px;
+  opacity: 0.85;
+}
+
+/* ---------- 覆盖层 ---------- */
+.overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  text-align: center;
+  padding: 24px;
+  z-index: 10;
+  background: rgba(20,10,40,0.72);
+  backdrop-filter: blur(3px);
+}
+
+.overlay.hidden { display: none; }
+
+/* ---------- 魔法导师剧情对话框 ---------- */
+.story-screen {
+  position: absolute;
+  inset: 0;
+  z-index: 12;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  padding: 18px;
+  background: rgba(10, 5, 30, 0.55);
+  cursor: pointer;
+}
+.story-screen.hidden { display: none; }
+.story-box {
+  background: linear-gradient(180deg, rgba(40,24,70,0.96), rgba(24,14,48,0.96));
+  border: 2px solid #b78bff;
+  border-radius: 14px;
+  padding: 14px 16px;
+  box-shadow: 0 6px 24px rgba(120,60,220,0.35);
+  text-align: left;
+  color: #f2eaff;
+}
+.story-top { display: flex; align-items: center; gap: 12px; }
+.story-portrait {
+  width: 52px; height: 52px; flex: 0 0 auto;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #ffe9b0, #7a4bd6);
+  border: 2px solid #e8d5ff;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 28px;
+}
+.story-name { font-size: 15px; font-weight: 800; color: #ffd87a; letter-spacing: 1px; }
+.story-step { font-size: 11px; color: #b9a6e0; }
+.story-text { margin: 10px 2px 4px; font-size: 15px; line-height: 1.65; min-height: 3.2em; }
+.story-hint { text-align: right; font-size: 11px; color: #9d8cc9; }
+.story-choices { display: flex; gap: 10px; margin-top: 10px; }
+.story-choice-btn {
+  flex: 1;
+  padding: 10px 8px;
+  border: 1.5px solid #ffd87a;
+  border-radius: 10px;
+  background: rgba(255,216,122,0.12);
+  color: #ffe9b0;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.story-choice-btn:active { background: rgba(255,216,122,0.3); }
+
+.title {
+  font-size: 44px;
+  font-weight: 900;
+  letter-spacing: 4px;
+  background: linear-gradient(180deg, #ffe27a, #ff9a3c);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  text-shadow: 0 4px 18px rgba(255,150,40,0.35);
+}
+
+.subtitle {
+  font-size: 16px;
+  line-height: 1.7;
+  opacity: 0.92;
+}
+
+.hall-pos {
+  font-size: 16px;
+  font-weight: 800;
+  color: #ffd24a;
+  background: rgba(255,210,80,0.12);
+  border: 1px solid rgba(255,210,80,0.4);
+  border-radius: 12px;
+  padding: 8px 18px;
+  letter-spacing: 1px;
+}
+
+.continue-btn {
+  background: linear-gradient(180deg, #7ee6ff, #3aa8e0);
+  box-shadow: 0 6px 0 #1a5a8a, 0 10px 24px rgba(0,0,0,0.4);
+  color: #0a2a3a;
+}
+.continue-btn:disabled {
+  filter: grayscale(0.8) brightness(0.7);
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+.btn {
+  min-width: 200px;
+  min-height: 56px;
+  padding: 14px 32px;
+  font-size: 20px;
+  font-weight: 800;
+  color: #2a1a0a;
+  background: linear-gradient(180deg, #ffe27a, #ffb03c);
+  border: none;
+  border-radius: 16px;
+  cursor: pointer;
+  box-shadow: 0 6px 0 #b96a1a, 0 10px 24px rgba(0,0,0,0.4);
+  transition: transform 0.08s, box-shadow 0.08s;
+}
+
+.btn:hover { filter: brightness(1.05); }
+.btn:focus-visible { outline: 3px solid #6ee7ff; outline-offset: 2px; }
+.btn:active {
+  transform: translateY(4px);
+  box-shadow: 0 2px 0 #b96a1a, 0 4px 12px rgba(0,0,0,0.4);
+}
+
+.hint {
+  font-size: 13px;
+  opacity: 0.75;
+  line-height: 1.6;
+}
+
+/* ---------- 结束页 ---------- */
+.over-title {
+  font-size: 36px;
+  font-weight: 900;
+  letter-spacing: 3px;
+  color: #ff7a5a;
+  text-shadow: 0 3px 14px rgba(255,90,60,0.4);
+}
+
+.result-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  width: min(90%, 420px);
+}
+
+.result-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 14px 8px;
+  background: rgba(255,255,255,0.08);
+  border: 1px solid rgba(255,255,255,0.18);
+  border-radius: 14px;
+}
+
+.result-num {
+  font-size: 28px;
+  font-weight: 900;
+  color: #ffd24a;
+}
+
+.result-label {
+  font-size: 12px;
+  opacity: 0.85;
+}
+
+@media (max-width: 480px) {
+  .title { font-size: 36px; }
+  .stat-num { font-size: 16px; }
+  .stat { min-width: 42px; padding: 3px 6px; }
+}
+
+/* ---------- 技能栏 ---------- */
+.skill-bar {
+  position: absolute;
+  bottom: 14px;
+  left: 0;
+  right: 0;
+  display: flex;
+  justify-content: center;
+  gap: 14px;
+  z-index: 8;
+  pointer-events: none;
+}
+
+.skill-btn {
+  position: relative;
+  width: 72px;
+  height: 72px;
+  border-radius: 18px;
+  border: 2px solid rgba(255,255,255,0.35);
+  background: rgba(20,10,40,0.6);
+  color: #fff;
+  cursor: pointer;
+  pointer-events: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  touch-action: none;
+  transition: transform 0.08s, box-shadow 0.1s, border-color 0.1s;
+}
+
+.skill-btn .skill-icon { font-size: 24px; line-height: 1; }
+.skill-btn .skill-name { font-size: 11px; font-weight: 700; opacity: 0.9; }
+.skill-btn .skill-key {
+  position: absolute;
+  top: 4px;
+  left: 6px;
+  font-size: 11px;
+  font-weight: 800;
+  color: #ffd24a;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.8);
+}
+.skill-btn .skill-cd {
+  position: absolute;
+  inset: 0;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  font-size: 26px;
+  font-weight: 900;
+  color: #fff;
+  background: rgba(10,5,20,0.62);
+  border-radius: 16px;
+  text-shadow: 0 1px 3px rgba(0,0,0,0.9);
+}
+
+.skill-btn:hover { border-color: rgba(255,255,255,0.7); }
+.skill-btn:focus-visible { outline: 3px solid #6ee7ff; outline-offset: 2px; }
+.skill-btn:active { transform: scale(0.94); }
+
+/* 可用（就绪）高亮 */
+.skill-btn:not(.cooling) {
+  border-color: rgba(255,226,122,0.8);
+  box-shadow: 0 0 12px rgba(255,200,80,0.5);
+}
+
+/* 冷却中：置灰 */
+.skill-btn.cooling {
+  filter: grayscale(0.7);
+  border-color: rgba(255,255,255,0.2);
+  box-shadow: none;
+}
+
+/* 激活中：发光 */
+.skill-btn.active {
+  border-color: #ffd24a;
+  box-shadow: 0 0 18px rgba(255,210,80,0.9);
+  animation: skillPulse 0.8s ease-in-out infinite;
+}
+
+@keyframes skillPulse {
+  0%, 100% { box-shadow: 0 0 12px rgba(255,210,80,0.7); }
+  50% { box-shadow: 0 0 22px rgba(255,210,80,1); }
+}
+
+/* ---------- 跳过关卡按钮 ---------- */
+.skip-btn {
+  position: absolute;
+  top: 64px;
+  right: 14px;
+  z-index: 8;
+  min-height: 44px;
+  padding: 8px 14px;
+  font-size: 13px;
+  font-weight: 800;
+  color: #2a1a0a;
+  background: linear-gradient(180deg, #ffe27a, #ffb03c);
+  border: none;
+  border-radius: 12px;
+  cursor: pointer;
+  box-shadow: 0 3px 0 #b96a1a, 0 5px 12px rgba(0,0,0,0.35);
+  touch-action: none;
+  transition: transform 0.08s, filter 0.1s;
+}
+
+.skip-btn:hover { filter: brightness(1.05); }
+.skip-btn:focus-visible { outline: 3px solid #6ee7ff; outline-offset: 2px; }
+.skip-btn:active { transform: translateY(2px); }
+
+/* Boss 战不可跳过：置灰禁用 */
+.skip-btn.disabled {
+  filter: grayscale(0.8) brightness(0.7);
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+/* ---------- 被动卡牌三选一 ---------- */
+.passive-screen { z-index: 12; }
+
+.passive-title {
+  font-size: 30px;
+  font-weight: 900;
+  letter-spacing: 2px;
+  background: linear-gradient(180deg, #ffe27a, #ff9a3c);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.card-row {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  width: min(92%, 520px);
+  max-height: 62vh;
+  overflow-y: auto;
+  padding: 4px;
+}
+
+.card-btn {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  text-align: left;
+  padding: 14px 16px;
+  min-height: 72px;
+  background: rgba(255,255,255,0.08);
+  border: 2px solid rgba(255,226,122,0.5);
+  border-radius: 16px;
+  color: #fff;
+  cursor: pointer;
+  touch-action: none;
+  transition: transform 0.08s, border-color 0.1s, box-shadow 0.1s;
+}
+
+.card-btn:hover { border-color: rgba(255,226,122,0.9); box-shadow: 0 0 14px rgba(255,200,80,0.4); }
+.card-btn:focus-visible { outline: 3px solid #6ee7ff; outline-offset: 2px; }
+.card-btn:active { transform: scale(0.97); }
+
+.card-icon { font-size: 30px; line-height: 1; flex-shrink: 0; }
+
+.card-name {
+  display: block;
+  font-size: 18px;
+  font-weight: 800;
+  color: #ffd24a;
+  margin-bottom: 2px;
+}
+
+.card-desc {
+  display: block;
+  font-size: 13px;
+  line-height: 1.5;
+  opacity: 0.9;
+}
+
+@media (max-width: 480px) {
+  .passive-title { font-size: 24px; }
+  .card-name { font-size: 16px; }
+  .card-desc { font-size: 12px; }
+}
+
+/* ---------- 武器面板（左下） ---------- */
+.weapon-panel {
+  position: absolute;
+  left: 12px;
+  bottom: 96px;
+  z-index: 7;
+  min-width: 180px;
+  padding: 8px 10px;
+  background: rgba(15,8,30,0.72);
+  border: 1px solid rgba(255,226,122,0.4);
+  border-radius: 12px;
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.weapon-panel.hidden { display: none; }
+
+.wp-title {
+  font-size: 12px;
+  font-weight: 800;
+  color: #ffd24a;
+  letter-spacing: 1px;
+  margin-bottom: 2px;
+}
+
+.wp-row {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  font-size: 12px;
+  line-height: 1.3;
+}
+
+.wp-row .wp-name {
+  flex: 1;
+  color: #fff;
+  font-weight: 700;
+}
+
+.wp-row .wp-val {
+  color: #ffd24a;
+  font-weight: 900;
+  font-size: 14px;
+  min-width: 28px;
+  text-align: right;
+}
+
+.wp-row .wp-sub {
+  color: rgba(255,255,255,0.75);
+  font-size: 11px;
+  min-width: 44px;
+  text-align: right;
+}
+
+.wp-main .wp-name { color: #7ee6ff; }
+.wp-sub2 .wp-name { color: #ffb03c; }
+
+/* ---------- 创作者模式 ---------- */
+.creator-btn {
+  background: linear-gradient(180deg, #b58cff, #7a4fd6);
+  color: #fff;
+  box-shadow: 0 6px 0 #4a2a8a, 0 10px 24px rgba(0,0,0,0.4);
+}
+.creator-btn:active { box-shadow: 0 2px 0 #4a2a8a, 0 4px 12px rgba(0,0,0,0.4); }
+
+.creator-row {
+  display: flex;
+  gap: 10px;
+  width: min(92%, 520px);
+}
+
+.creator-input {
+  flex: 1;
+  min-height: 52px;
+  padding: 0 14px;
+  font-size: 18px;
+  color: #fff;
+  background: rgba(0,0,0,0.45);
+  border: 2px solid rgba(255,226,122,0.5);
+  border-radius: 14px;
+  outline: none;
+}
+.creator-input:focus-visible { border-color: #ffd24a; }
+
+.creator-confirm {
+  min-width: 96px;
+  min-height: 52px;
+  padding: 0 18px;
+  font-size: 18px;
+}
+
+.creator-msg {
+  min-height: 20px;
+  font-weight: 800;
+}
+.creator-msg.error {
+  color: #ff7a5a;
+  text-shadow: 0 1px 4px rgba(0,0,0,0.6);
+}
+
+/* ---------- 创作者模式：自定义主角参数面板 ---------- */
+.creator-pw-row { margin-bottom: 4px; }
+
+.creator-custom {
+  width: min(92%, 520px);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 16px;
+  background: rgba(255,226,122,0.08);
+  border: 1px solid rgba(255,226,122,0.4);
+  border-radius: 14px;
+  max-height: 46vh;
+  overflow-y: auto;
+}
+
+.creator-custom.hidden { display: none; }
+
+.creator-custom-title {
+  font-size: 15px;
+  font-weight: 800;
+  color: #ffd24a;
+  letter-spacing: 1px;
+  text-align: center;
+}
+
+.creator-param-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.creator-param-label {
+  flex-shrink: 0;
+  min-width: 118px;
+  font-size: 14px;
+  font-weight: 700;
+  color: #fff;
+}
+
+.creator-num {
+  min-height: 48px !important;
+  padding: 0 12px !important;
+  font-size: 16px !important;
+}
+
+.creator-apply, .creator-restore, .creator-cancel {
+  min-width: auto;
+  min-height: 48px;
+  padding: 10px 20px;
+  font-size: 16px;
+}
+
+.creator-cancel {
+  background: linear-gradient(180deg, #ff9a5a, #d66a3c);
+  color: #fff;
+  box-shadow: 0 6px 0 #8a3a1a, 0 10px 24px rgba(0,0,0,0.4);
+}
+.creator-cancel:active { box-shadow: 0 2px 0 #8a3a1a, 0 4px 12px rgba(0,0,0,0.4); }
+
+.creator-copy-src {
+  min-width: auto;
+  min-height: 52px;
+  padding: 12px 24px;
+  font-size: 17px;
+  background: linear-gradient(180deg, #7ee6ff, #3aa8e0);
+  color: #0a2a3a;
+  box-shadow: 0 6px 0 #1a5a8a, 0 10px 24px rgba(0,0,0,0.4);
+}
+.creator-copy-src:active { box-shadow: 0 2px 0 #1a5a8a, 0 4px 12px rgba(0,0,0,0.4); }
+
+.creator-restore {
+  background: linear-gradient(180deg, #b58cff, #7a4fd6);
+  color: #fff;
+  box-shadow: 0 6px 0 #4a2a8a, 0 10px 24px rgba(0,0,0,0.4);
+}
+.creator-restore:active { box-shadow: 0 2px 0 #4a2a8a, 0 4px 12px rgba(0,0,0,0.4); }
+
+/* ---------- 创作者模式：保存方案 ---------- */
+.creator-schemes {
+  margin-top: 6px;
+  padding-top: 10px;
+  border-top: 1px dashed rgba(255,226,122,0.35);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.creator-save-row { width: 100%; }
+.creator-save-row .creator-input { flex: 1; min-height: 48px; }
+.creator-save-btn {
+  min-width: auto;
+  min-height: 48px;
+  padding: 10px 16px;
+  font-size: 15px;
+}
+
+.creator-scheme-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 32vh;
+  overflow-y: auto;
+}
+
+.creator-scheme-empty {
+  font-size: 13px;
+  opacity: 0.7;
+  text-align: center;
+  padding: 8px 0;
+}
+
+.creator-scheme-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  background: rgba(0,0,0,0.35);
+  border: 1px solid rgba(255,226,122,0.35);
+  border-radius: 10px;
+}
+
+.creator-scheme-name {
+  flex-shrink: 0;
+  max-width: 90px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 14px;
+  font-weight: 800;
+  color: #ffd24a;
+}
+
+.creator-scheme-meta {
+  flex: 1;
+  font-size: 12px;
+  color: rgba(255,255,255,0.85);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.creator-scheme-load, .creator-scheme-del {
+  min-width: auto;
+  min-height: 40px;
+  padding: 6px 12px;
+  font-size: 13px;
+}
+
+.creator-scheme-load {
+  background: linear-gradient(180deg, #7ee6ff, #3aa8e0);
+  box-shadow: 0 4px 0 #1a5a8a, 0 6px 14px rgba(0,0,0,0.35);
+  color: #0a2a3a;
+}
+.creator-scheme-load:active { box-shadow: 0 1px 0 #1a5a8a, 0 3px 8px rgba(0,0,0,0.35); }
+
+.creator-scheme-del {
+  background: linear-gradient(180deg, #ff7a5a, #d63a1a);
+  box-shadow: 0 4px 0 #7a1a0a, 0 6px 14px rgba(0,0,0,0.35);
+  color: #fff;
+}
+.creator-scheme-del:active { box-shadow: 0 1px 0 #7a1a0a, 0 3px 8px rgba(0,0,0,0.35); }
+
+/* ---------- 大厅：查看源码按钮 ---------- */
+.src-view-btn {
+  background: linear-gradient(180deg, #b58cff, #7a4fd6);
+  color: #fff;
+  box-shadow: 0 6px 0 #4a2a8a, 0 10px 24px rgba(0,0,0,0.4);
+}
+.src-view-btn:active { box-shadow: 0 2px 0 #4a2a8a, 0 4px 12px rgba(0,0,0,0.4); }
+
+/* ---------- 源码查看弹窗 ---------- */
+.src-modal {
+  position: absolute;
+  inset: 0;
+  z-index: 30;
+  background: rgba(10,5,20,0.85);
+  backdrop-filter: blur(3px);
+}
+.src-modal.hidden { display: none; }
+
+.src-modal-inner {
+  position: absolute;
+  inset: 5%;
+  background: #1e1e1e;
+  border-radius: 12px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid rgba(255,226,122,0.35);
+}
+
+.src-modal-bar {
+  display: flex;
+  gap: 8px;
+  padding: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+  background: rgba(0,0,0,0.4);
+}
+
+.src-select {
+  min-height: 44px;
+  padding: 0 12px;
+  font-size: 15px;
+  color: #fff;
+  background: rgba(0,0,0,0.6);
+  border: 1px solid rgba(255,226,122,0.5);
+  border-radius: 10px;
+  outline: none;
+}
+.src-select:focus-visible { border-color: #ffd24a; }
+
+.src-copy-btn, .src-close-btn {
+  min-height: 44px;
+  min-width: 96px;
+  padding: 0 16px;
+  font-size: 15px;
+  font-weight: 800;
+  border: none;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: transform 0.08s, filter 0.1s;
+}
+.src-copy-btn {
+  color: #0a2a3a;
+  background: linear-gradient(180deg, #ffe27a, #ffb03c);
+  box-shadow: 0 3px 0 #b96a1a;
+}
+.src-close-btn {
+  color: #fff;
+  background: linear-gradient(180deg, #ff9a5a, #d66a3c);
+  box-shadow: 0 3px 0 #8a3a1a;
+}
+.src-copy-btn:hover, .src-close-btn:hover { filter: brightness(1.05); }
+.src-copy-btn:focus-visible, .src-close-btn:focus-visible { outline: 3px solid #6ee7ff; outline-offset: 2px; }
+.src-copy-btn:active, .src-close-btn:active { transform: translateY(2px); }
+
+.src-content {
+  flex: 1;
+  overflow: auto;
+  margin: 0;
+  padding: 12px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 13px;
+  line-height: 1.5;
+  color: #ddd;
+}
+
+.src-msg {
+  min-height: 22px;
+  padding: 0 12px 8px;
+  font-size: 14px;
+  font-weight: 800;
+  color: #7ee6ff;
+}
+.src-msg.error { color: #ff7a5a; }
+</style>
+</head>
+<body>
+  <div id="app"></div>
+  <script>
+// 打怪升级 —— 核心游戏逻辑（canvas 渲染 + 状态机 + Boss 关）
+
+const ASSETS = {
+  hero: 'https://mdn.alipayobjects.com/asap_serivce/uri/file/as/pfgs-image-f55ffcb74bb04d6f.png',
+  monsterRed: 'https://mdn.alipayobjects.com/asap_serivce/uri/file/as/pfgs-image-b29054d795114833.png',
+  monsterGreen: 'https://mdn.alipayobjects.com/asap_serivce/uri/file/as/pfgs-image-c821ebcb3e324580.png',
+  monsterPurple: 'https://mdn.alipayobjects.com/asap_serivce/uri/file/as/pfgs-image-155a15856cb64412.png',
+  bossExtreme: 'https://mdn.alipayobjects.com/asap_serivce/uri/file/as/pfgs-image-a5c801c2dcb1427e.png',
+  bg: 'https://mdn.alipayobjects.com/afts/img/zaRQTJcuXJwAAAAAdpAAAAgAevFOAQFr/original',
+  bossReaper: 'https://mdn.alipayobjects.com/asap_serivce/uri/file/as/pfgs-image-4efad685a69f4c24.png',
+  bgReaper: 'https://mdn.alipayobjects.com/afts/img/fdqMTKODVOMAAAAAgBAAAAgAevFOAQFr/original',
+  eliteBoar: 'https://mdn.alipayobjects.com/asap_serivce/uri/file/as/pfgs-image-57f3e5d333d24e0a.png',
+  eliteGoblin: 'https://mdn.alipayobjects.com/asap_serivce/uri/file/as/pfgs-image-d74ad8c728254c7d.png',
+};
+
+const MONSTER_TYPES = [
+  { img: ASSETS.monsterRed, hp: 2, speed: 90, exp: 12, dmg: 1, r: 30 },
+  { img: ASSETS.monsterGreen, hp: 1, speed: 140, exp: 8, dmg: 1, r: 26 },
+  { img: ASSETS.monsterPurple, hp: 4, speed: 65, exp: 20, dmg: 2, r: 34 },
+];
+
+// Boss 关配置
+const BOSS_TRIGGER_LEVEL = 10; // 达到该等级触发 Boss
+const BOSS_ETERNITY = { name: 'Eternity', hp: 100000 };
+const BOSS_PSEUDO = { name: '伪·永恒', hp: 1000 };
+// 最终 Boss 关「极限」：1000 血，持续向前方轰出炮弹（伤害 10），半血启动杀戮领域
+const BOSS_EXTREME = { name: '极限', hp: 1000 };
+// 伪最终 Boss「死神」：通关第 5 关后登场（背景随出场显现）
+const BOSS_REAPER = { name: '死神', hp: 2000 };
+// 第 6 关「进化Boss」：击败死神后登场，分两个阶段作战
+// 第一阶段：500 血，Boss 不移动、不攻击，每 1.5 秒召唤第 1 关量级的小怪；玩家打空 500 血进入第二阶段
+const BOSS_EVOLVED = { name: '进化Boss', hp1: 500, hp2: 300 };
+// 进化Boss 第一阶段：小怪召唤间隔（秒）
+const EVOLVED_SUMMON_INTERVAL = 1.5;
+// 进化Boss 第二阶段：直线弹丸命中伤害 = 10 + 主角最大生命值 * 5%
+const EVOLVED_PROJECTILE_DMG_BASE = 10;
+const EVOLVED_PROJECTILE_DMG_RATIO = 0.05;
+// 第二阶段开场：Boss 自身获得 3 秒复活金身（不受伤害且不攻击），并释放全屏缓行领域持续 10 秒
+const EVOLVED_RESPAWN_INVULN = 3;
+const EVOLVED_SLOW_DURATION = 10;
+// 第二阶段 Boss 为远程攻击型：与主角保持的距离范围，过近后撤、过远靠拢
+const EVOLVED_KEEP_DISTANCE_MIN = 300;
+const EVOLVED_KEEP_DISTANCE_MAX = 460;
+// 死神攻击参数
+const REAPER_SLASH_INTERVAL = 2.4;   // 闪现横劈间隔（普通攻击）
+const REAPER_SLASH_WARN = 1.0;       // 横劈定身时长（秒），闪现后定身再攻击
+const REAPER_SLASH_RANGE = 160;      // 扇形斩击最大半径
+const REAPER_SLASH_HALF_ANGLE = 0.7; // 扇形半角（弧度），约 ±40°
+const REAPER_SLASH_DMG_RATIO = 0.1;  // 横劈伤害 = 主角最大生命值 * 10%
+const REAPER_RIFT_CHARGE = 3.0;      // 裂缝蓄力时长（秒）
+const REAPER_RIFT_INTERVAL = 8.0;    // 裂缝攻击检查间隔（普通攻击节奏）
+const REAPER_RIFT_PROB = 0.15;       // 特殊攻击触发概率（远低于普通攻击）
+const REAPER_RIFT_DMG = 10;          // 裂缝瞬间命中扣血
+const REAPER_CURSE_DPS_RATIO = 0.05; // 诅咒每秒扣主角最大生命值 * 5%
+const REAPER_CURSE_DURATION = 2.0;   // 诅咒持续时长（秒）
+const REAPER_BLACKHOLE_INTERVAL = 6.5; // 黑洞释放间隔（秒）
+const REAPER_BLACKHOLE_DRIFT = 120;   // 黑洞向远离主角方向漂移的速度（不再强行吸入主角）
+const REAPER_BLACKHOLE_LIFE = 2.4;    // 黑洞存活时长（到期未击中则射出八道光线）
+const REAPER_BLACKHOLE_RADIUS = 60;   // 黑洞判定半径
+const REAPER_BLACKHOLE_STUN = 2.0;    // 被击中定身时长（秒），并立即弹出结束
+const REAPER_BLACKHOLE_BEAM_DMG_RATIO = 0.05; // 八道光线击中掉主角最大生命值 * 5%
+const EXTREME_SHOT_DMG = 10; // 炮弹伤害
+const EXTREME_SHOT_INTERVAL = 0.9; // 炮弹发射间隔（秒）
+const EXTREME_SHOT_SPEED = 420; // 炮弹速度
+// 关卡推进：击败伪·永恒后进入第 2~3 关小怪关，通关第 3 关强制进入 Boss「极限」，击败极限后进入第 4~5 关小怪关，通关第 5 关进入伪最终 Boss「死神」
+const MAX_STAGE = 5; // 小怪关最大关卡数
+// 第 2、3 关通关条件：额外击败怪物数量（HUD 显示本关进度）；第 4、5 关需击败 300 个小怪通关
+const STAGE_KILL_GOAL = { 2: 500, 3: 500, 4: 300, 5: 300 }; // 第 2、3、4、5 关击杀通关条件
+// 「极限」陨石：预标落点位置与范围，砸到一下造成 8 点伤害（杀戮领域开启时翻倍为 16）
+const METEOR_WARNING = 1.1; // 落点预警时长（秒）
+const METEOR_RADIUS = 70; // 落点范围半径
+const METEOR_DMG = 8; // 陨石命中伤害
+const METEOR_INTERVAL = 1.1; // 陨石投掷间隔（秒）
+const EXTREME_MOVE_SPEED = 180; // Boss「极限」灵活上下左右移动速度
+// 第 4 关精英怪：血量为常规小怪的 20 倍、不移动、会召唤小怪（已废弃，保留常量供历史存档兼容）
+const ELITE_STAGE = 4;
+const ELITE_SPAWN_INTERVAL = 8; // 已废弃：第 6 关精英关卡改为两波固定登场，不再按间隔刷新
+const ELITE_SUMMON_INTERVAL = 4; // 已废弃：精英怪不再召唤小怪
+
+// ---------- 第 6 关精英关卡：两波各 3 只精英怪（不重叠、随机新角色）、向主角方向发射直线弹丸、第二波剩 1 只狂暴 ----------
+const ELITE_BATTLE_STAGE = 6; // 精英关卡编号
+const ELITE_WAVE1_COUNT = 3; // 第一波精英怪数量
+const ELITE_WAVE2_COUNT = 3; // 第二波精英怪数量
+const ELITE_ENRAGE_LEFT = 1; // 只有第二波且场上剩余该数量时才进入狂暴（第一波不触发）
+// 精英怪弹丸：向主角所处方向沿直线飞行，命中造成伤害
+const ELITE_PROJECTILE_INTERVAL = 2.2; // 正常发射弹丸间隔（秒）
+const ELITE_PROJECTILE_ENRAGE_INTERVAL = 1.0; // 狂暴状态发射弹丸间隔（秒）
+const ELITE_PROJECTILE_SPEED = 380; // 弹丸直线飞行速度
+const ELITE_PROJECTILE_R = 9; // 弹丸半径
+const ELITE_PROJECTILE_DMG = 8; // 弹丸命中伤害
+// 新角色精灵图（加载失败降级为程序化绘制）
+const ELITE_ROLES = [
+  { img: ASSETS.eliteBoar, color: '#ff9a3c' },
+  { img: ASSETS.eliteGoblin, color: '#7ee6a0' },
+];
+
+// ---------- 副武器体系（第二关结束后三选一） ----------
+// 副武器枪线：伤害固定为主魔法弹伤害的 30%，独立射速与子弹表现
+const SECONDARY_DMG_RATIO = 0.3; // 副武器单发伤害 = 主魔法弹 * 30%
+const SECONDARY_WEAPONS = {
+  rifle:   { name: '突击步枪', icon: '🔫', interval: 0.28, speed: 640, r: 7,  color: '#ffd24a' },
+  smg:     { name: '冲锋枪',   icon: '🔫', interval: 0.12, speed: 580, r: 5,  color: '#ff9a5a' },
+  pistol:  { name: '超级手枪', icon: '🔫', interval: 0.42, speed: 720, r: 11, color: '#7ee6ff' },
+};
+
+// Eternity 全屏能量波：预警时长、命中伤害、释放间隔
+const WAVE_WARNING = 1.2; // 蓄力预警（秒）
+const WAVE_DAMAGE = 10; // 每次能量波伤害
+const WAVE_INTERVAL = 3.0; // 两次能量波间隔（秒）
+
+// 伪·永恒光波：蓄力时长、攻击间隔、光波伤害
+const PSEUDO_CHARGE = 2.0; // 蓄力（秒），蓄力期间保持不动
+const PSEUDO_INTERVAL = 5.0; // 两次攻击间隔（秒）
+const PSEUDO_BEAM_DMG = 2; // 光波命中伤害
+
+// ---------- 技能体系 ----------
+// 1) 绝对防御：金身 6s 不受任何伤害，冷却 40s
+const SKILL_DEFENSE_DURATION = 6;
+const SKILL_DEFENSE_CD = 40;
+// 2) 充能攻击：射速 -20%、伤害 +150%，持续 8s，冷却 30s
+const SKILL_CHARGE_DURATION = 8;
+const SKILL_CHARGE_CD = 30;
+const SKILL_CHARGE_FIRE_MULT = 1.2; // 射速降低 20% -> 间隔 *1.2
+const SKILL_CHARGE_DMG_MULT = 2.5;   // 伤害 +150% -> *2.5
+// 3) 大招：向前射出两列子弹，持续 10s，冷却 120s
+const SKILL_ULT_DURATION = 10;
+const SKILL_ULT_CD = 120;
+
+function loadImage(src) {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = () => resolve(null);
+    img.src = src;
+  });
+}
+
+class Game {
+  constructor(root) {
+    this.root = root;
+    this.state = 'idle'; // idle | playing | over
+    this.raf = 0;
+    this.lastT = 0;
+    this.images = {};
+    this.keys = new Set();
+    this.touchX = null;
+    this.touchY = null;
+
+    // DOM
+    const wrap = document.createElement('div');
+    wrap.className = 'stage-wrap';
+    this.canvas = document.createElement('canvas');
+    this.canvas.className = 'stage';
+    wrap.appendChild(this.canvas);
+    root.appendChild(wrap);
+
+    // HUD
+    this.hud = document.createElement('div');
+    this.hud.className = 'hud';
+    this.hud.innerHTML = `
+      <div class="hud-left">
+        <div class="hp-row"><span class="hud-label">生命</span><div class="hp-bar"><div class="hp-fill"></div></div></div>
+        <div class="exp-row"><span class="hud-label">经验</span><div class="exp-bar"><div class="exp-fill"></div></div></div>
+      </div>
+      <div class="hud-right">
+        <div class="stat"><span class="stat-num" data-k="lv">1</span><span class="stat-label">等级</span></div>
+        <div class="stat"><span class="stat-num" data-k="dmg">1</span><span class="stat-label">攻击</span></div>
+        <div class="stat"><span class="stat-num" data-k="kill">0</span><span class="stat-label">击杀</span></div>
+        <div class="stat"><span class="stat-num" data-k="score">0</span><span class="stat-label">分数</span></div>
+      </div>`;
+    root.appendChild(this.hud);
+
+    // Boss HUD（顶部名称 + 血条）
+    this.bossHud = document.createElement('div');
+    this.bossHud.className = 'boss-hud hidden';
+    this.bossHud.innerHTML = `
+      <div class="boss-name" data-k="bossName">Eternity</div>
+      <div class="boss-bar"><div class="boss-fill"></div></div>`;
+    root.appendChild(this.bossHud);
+
+    // 第 2、3 关击杀进度 HUD（顶部居中，显示本关 x/500）
+    this.stageProgress = document.createElement('div');
+    this.stageProgress.className = 'stage-progress hidden';
+    this.stageProgress.innerHTML = `<span data-k="stageNum">2</span> 关 · 击败 <b data-k="stageKills">0</b>/<span data-k="stageGoal">500</span>`;
+    root.appendChild(this.stageProgress);
+
+    // 跳过关卡按钮（右上角，Boss 关不可用）
+    this.skipBtn = document.createElement('button');
+    this.skipBtn.className = 'skip-btn';
+    this.skipBtn.textContent = '跳过关卡';
+    this.skipBtn.addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      this.skipStage();
+    });
+    root.appendChild(this.skipBtn);
+
+    // 技能栏（底部三个按钮：绝对防御 / 充能攻击 / 大招）
+    this.skillBar = document.createElement('div');
+    this.skillBar.className = 'skill-bar';
+    this.skillBar.innerHTML = `
+      <button class="skill-btn" data-skill="defense" aria-label="绝对防御">
+        <span class="skill-icon">🛡</span><span class="skill-name">金身</span>
+        <span class="skill-cd"></span><span class="skill-key">1</span>
+      </button>
+      <button class="skill-btn" data-skill="charge" aria-label="充能攻击">
+        <span class="skill-icon">⚡</span><span class="skill-name">充能</span>
+        <span class="skill-cd"></span><span class="skill-key">2</span>
+      </button>
+      <button class="skill-btn" data-skill="ult" aria-label="大招">
+        <span class="skill-icon">☄</span><span class="skill-name">大招</span>
+        <span class="skill-cd"></span><span class="skill-key">3</span>
+      </button>`;
+    root.appendChild(this.skillBar);
+    this.skillBtns = {
+      defense: this.skillBar.querySelector('[data-skill="defense"]'),
+      charge: this.skillBar.querySelector('[data-skill="charge"]'),
+      ult: this.skillBar.querySelector('[data-skill="ult"]'),
+    };
+    for (const key of Object.keys(this.skillBtns)) {
+      this.skillBtns[key].addEventListener('pointerdown', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        this.useSkill(key);
+      });
+    }
+
+    // 开始页
+    this.startScreen = document.createElement('div');
+    this.startScreen.className = 'overlay start-screen';
+    this.startScreen.innerHTML = `
+      <h1 class="title">打怪升级</h1>
+      <div class="hall-pos" data-k="hallPos">尚无进度 · 从第 1 关开始</div>
+      <p class="subtitle">左右移动 · 点击发射魔法弹<br>打怪攒经验，升级变强！<br>达到 10 级挑战 Boss「Eternity」！</p>
+      <button class="btn start-btn" data-hall="start" data-harness-action="start">开始游戏</button>
+      <button class="btn continue-btn" data-hall="continue" disabled>继续挑战</button>
+      <button class="btn creator-btn" data-hall="creator">创作者模式</button>
+      <button class="btn src-view-btn" data-hall="srcview">查看源码</button>
+      <p class="hint">键盘 ← → / A D 移动，空格或点击屏幕发射<br>每进入新关卡或 Boss 关自动存档</p>`;
+    root.appendChild(this.startScreen);
+
+    // 结束页
+    this.overScreen = document.createElement('div');
+    this.overScreen.className = 'overlay over-screen hidden';
+    this.overScreen.innerHTML = `
+      <h2 class="over-title" data-k="overTitle">挑战结束</h2>
+      <div class="result-grid">
+        <div class="result-item"><span class="result-num" data-k="lv">1</span><span class="result-label">达到等级</span></div>
+        <div class="result-item"><span class="result-num" data-k="kill">0</span><span class="result-label">击杀怪物</span></div>
+        <div class="result-item"><span class="result-num" data-k="score">0</span><span class="result-label">最终分数</span></div>
+      </div>
+      <button class="btn restart-btn">再来一局</button>`;
+    root.appendChild(this.overScreen);
+
+    // 源码查看弹窗（大厅「查看源码」按钮触发）
+    this.srcModal = document.createElement('div');
+    this.srcModal.className = 'src-modal hidden';
+    this.srcModal.innerHTML = `
+      <div class="src-modal-inner">
+        <div class="src-modal-bar">
+          <select class="src-select" aria-label="选择源文件">
+            <option value="index.html">index.html</option>
+            <option value="main.js">main.js</option>
+            <option value="styles.css">styles.css</option>
+            <option value="game.js">game.js</option>
+          </select>
+          <button class="src-copy-btn">一键复制</button>
+          <button class="src-close-btn">关闭</button>
+        </div>
+        <pre class="src-content"></pre>
+        <p class="src-msg"></p>
+      </div>`;
+    root.appendChild(this.srcModal);
+    this.srcSelect = this.srcModal.querySelector('.src-select');
+    this.srcContent = this.srcModal.querySelector('.src-content');
+    this.srcCopyBtn = this.srcModal.querySelector('.src-copy-btn');
+    this.srcCloseBtn = this.srcModal.querySelector('.src-close-btn');
+    this.srcMsg = this.srcModal.querySelector('.src-msg');
+
+    // 事件
+    this.startBtn = this.startScreen.querySelector('[data-hall="start"]');
+    this.restartBtn = this.overScreen.querySelector('.restart-btn');
+    // 被动卡牌三选一界面（第一次 Boss 关结束后弹出）
+    this.passiveScreen = document.createElement('div');
+    this.passiveScreen.className = 'overlay passive-screen hidden';
+    this.passiveScreen.innerHTML = `
+      <h2 class="passive-title">选择一张被动卡牌</h2>
+      <p class="subtitle">击败伪·永恒后，获得一项专属被动能力！</p>
+      <div class="card-row">
+        <button class="card-btn" data-passive="break">
+          <span class="card-icon">🔥</span>
+          <span class="card-name">破釜沉舟</span>
+          <span class="card-desc">血量低于 10% 且屏幕小怪 ≥10 时直接清屏，每关限一次</span>
+        </button>
+        <button class="card-btn" data-passive="control">
+          <span class="card-icon">❄️</span>
+          <span class="card-name">控制领域</span>
+          <span class="card-desc">血量低于 50% 时自动开启，屏幕内小怪移速降低 20%，持续 20s</span>
+        </button>
+        <button class="card-btn" data-passive="spring">
+          <span class="card-icon">🪀</span>
+          <span class="card-name">弹簧陷阱</span>
+          <span class="card-desc">屏幕内有 20 只怪时自动在底端生成弹簧，怪兽碰到反弹到顶端，持续 15s</span>
+        </button>
+      </div>`;
+    root.appendChild(this.passiveScreen);
+    this.passiveBtns = {
+      break: this.passiveScreen.querySelector('[data-passive="break"]'),
+      control: this.passiveScreen.querySelector('[data-passive="control"]'),
+      spring: this.passiveScreen.querySelector('[data-passive="spring"]'),
+    };
+    for (const key of Object.keys(this.passiveBtns)) {
+      this.passiveBtns[key].addEventListener('pointerdown', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        this.selectPassive(key);
+      });
+    }
+
+    // 魔法导师剧情对话框（半互动式：点击推进，关键节点可选祝福）
+    this.storyScreen = document.createElement('div');
+    this.storyScreen.className = 'story-screen hidden';
+    this.storyScreen.innerHTML = `
+      <div class="story-box">
+        <div class="story-top">
+          <div class="story-portrait">🧙‍♂️</div>
+          <div>
+            <div class="story-name">魔法导师 · 艾泽尔</div>
+            <div class="story-step" data-k="storyStep"></div>
+          </div>
+        </div>
+        <p class="story-text" data-k="storyText"></p>
+        <div class="story-choices hidden" data-k="storyChoices">
+          <button class="story-choice-btn" data-blessing="power">✨ 力量祝福<br><span style="font-weight:400;font-size:11px">攻击力永久 +2</span></button>
+          <button class="story-choice-btn" data-blessing="vitality">❤️ 生命祝福<br><span style="font-weight:400;font-size:11px">生命上限永久 +2 并回满</span></button>
+        </div>
+        <div class="story-hint" data-k="storyHint">点击任意处继续 ▸</div>
+      </div>`;
+    root.appendChild(this.storyScreen);
+    this.storyTextEl = this.storyScreen.querySelector('[data-k="storyText"]');
+    this.storyStepEl = this.storyScreen.querySelector('[data-k="storyStep"]');
+    this.storyHintEl = this.storyScreen.querySelector('[data-k="storyHint"]');
+    this.storyChoicesEl = this.storyScreen.querySelector('[data-k="storyChoices"]');
+    this.storyScreen.addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      if (e.target.closest('.story-choice-btn')) return; // 点选项时不推进
+      this.advanceStory();
+    });
+    for (const btn of this.storyScreen.querySelectorAll('.story-choice-btn')) {
+      btn.addEventListener('pointerdown', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        this.chooseBlessing(btn.dataset.blessing);
+      });
+    }
+
+    // 副武器三选一界面（第二关结束后弹出）
+    this.weaponScreen = document.createElement('div');
+    this.weaponScreen.className = 'overlay passive-screen hidden';
+    this.weaponScreen.innerHTML = `
+      <h2 class="passive-title">选择第二把武器</h2>
+      <p class="subtitle">第二关结束！获得一条副武器枪线，伤害为主魔法弹的 30%。</p>
+      <div class="card-row">
+        <button class="card-btn" data-weapon="rifle">
+          <span class="card-icon">🔫</span>
+          <span class="card-name">突击步枪</span>
+          <span class="card-desc">单发伤害 30% · 射速 3.6/s · 弹速 640</span>
+        </button>
+        <button class="card-btn" data-weapon="smg">
+          <span class="card-icon">🔫</span>
+          <span class="card-name">冲锋枪</span>
+          <span class="card-desc">单发伤害 30% · 射速 8.3/s · 弹速 580</span>
+        </button>
+        <button class="card-btn" data-weapon="pistol">
+          <span class="card-icon">🔫</span>
+          <span class="card-name">超级手枪</span>
+          <span class="card-desc">单发伤害 30% · 射速 2.4/s · 弹速 720 · 大弹丸</span>
+        </button>
+      </div>`;
+    root.appendChild(this.weaponScreen);
+    this.weaponBtns = {
+      rifle: this.weaponScreen.querySelector('[data-weapon="rifle"]'),
+      smg: this.weaponScreen.querySelector('[data-weapon="smg"]'),
+      pistol: this.weaponScreen.querySelector('[data-weapon="pistol"]'),
+    };
+    for (const key of Object.keys(this.weaponBtns)) {
+      this.weaponBtns[key].addEventListener('pointerdown', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        this.selectWeapon(key);
+      });
+    }
+
+    // 武器面板（左下）：展示当前主魔法弹与副武器数值
+    this.weaponPanel = document.createElement('div');
+    this.weaponPanel.className = 'weapon-panel hidden';
+    this.weaponPanel.innerHTML = `
+      <div class="wp-title">武器面板</div>
+      <div class="wp-row wp-main"><span class="wp-name">主魔法弹</span><span class="wp-val" data-k="mainDmg">1</span><span class="wp-sub" data-k="mainRate">2.0/s</span></div>
+      <div class="wp-row wp-sub2"><span class="wp-name" data-k="wName">—</span><span class="wp-val" data-k="wDmg">—</span><span class="wp-sub" data-k="wRate">—</span></div>`;
+    root.appendChild(this.weaponPanel);
+
+    // 大厅：开始（从头）/ 继续（从存档）
+    this.hallPos = this.startScreen.querySelector('[data-k="hallPos"]');
+    this.hallBtns = {
+      start: this.startScreen.querySelector('[data-hall="start"]'),
+      continue: this.startScreen.querySelector('[data-hall="continue"]'),
+      creator: this.startScreen.querySelector('[data-hall="creator"]'),
+    };
+    // 创作者模式密码弹层
+    this.creatorModeOn = false;
+    this.creatorScreen = document.createElement('div');
+    this.creatorScreen.className = 'overlay passive-screen hidden';
+    this.creatorScreen.innerHTML = `
+      <h2 class="passive-title">创作者模式</h2>
+      <p class="subtitle" data-k="creatorSub">输入正确密码开启创作者模式，可从第 1 关开始逐关跳过（含 Boss 关）。</p>
+      <div class="creator-row creator-pw-row">
+        <input class="creator-input" type="password" placeholder="请输入密码" autocomplete="off">
+        <button class="btn creator-confirm">确认</button>
+      </div>
+      <div class="creator-custom hidden" data-k="creatorCustom">
+        <p class="creator-custom-title">自定义主角参数（立即生效）</p>
+        <div class="creator-param-row">
+          <span class="creator-param-label">血量</span>
+          <input class="creator-input creator-num" type="number" min="1" max="99999" step="1" data-param="maxHp" value="">
+        </div>
+        <div class="creator-param-row">
+          <span class="creator-param-label">攻击力</span>
+          <input class="creator-input creator-num" type="number" min="0.1" max="99999" step="0.5" data-param="damage" value="">
+        </div>
+        <div class="creator-param-row">
+          <span class="creator-param-label">攻击速度(间隔秒)</span>
+          <input class="creator-input creator-num" type="number" min="0.05" max="5" step="0.05" data-param="fireInterval" value="">
+        </div>
+        <button class="btn creator-apply">应用参数</button>
+        <button class="btn creator-restore">一键回溯</button>
+        <button class="btn creator-cancel">取消</button>
+        <div class="creator-schemes">
+          <p class="creator-custom-title">保存方案</p>
+          <div class="creator-row creator-save-row">
+            <input class="creator-input" type="text" placeholder="方案名" maxlength="12" autocomplete="off">
+            <button class="btn creator-save-btn">保存当前</button>
+          </div>
+          <div class="creator-scheme-list"></div>
+        </div>
+        <button class="btn creator-copy-src">复制本游戏源码</button>
+      </div>
+      <p class="hint creator-msg"></p>`;
+    root.appendChild(this.creatorScreen);
+    this.creatorInput = this.creatorScreen.querySelector('.creator-input');
+    this.creatorMsg = this.creatorScreen.querySelector('.creator-msg');
+    this.creatorConfirm = this.creatorScreen.querySelector('.creator-confirm');
+    this.creatorCustom = this.creatorScreen.querySelector('[data-k="creatorCustom"]');
+    this.creatorSub = this.creatorScreen.querySelector('[data-k="creatorSub"]');
+    this.creatorApplyBtn = this.creatorScreen.querySelector('.creator-apply');
+    this.creatorRestoreBtn = this.creatorScreen.querySelector('.creator-restore');
+    this.creatorCancelBtn = this.creatorScreen.querySelector('.creator-cancel');
+    this.creatorSaveInput = this.creatorScreen.querySelector('.creator-save-row .creator-input');
+    this.creatorSaveBtn = this.creatorScreen.querySelector('.creator-save-btn');
+    this.creatorSchemeList = this.creatorScreen.querySelector('.creator-scheme-list');
+    this.creatorCopySrcBtn = this.creatorScreen.querySelector('.creator-copy-src');
+    this.creatorNumInputs = {
+      maxHp: this.creatorScreen.querySelector('[data-param="maxHp"]'),
+      damage: this.creatorScreen.querySelector('[data-param="damage"]'),
+      fireInterval: this.creatorScreen.querySelector('[data-param="fireInterval"]'),
+    };
+    const closeCreator = () => {
+      this.creatorScreen.classList.add('hidden');
+      this.creatorInput.value = '';
+      this.creatorMsg.textContent = '';
+      this.creatorMsg.classList.remove('error');
+    };
+    // 开启创作者模式后：展示自定义参数面板并填充当前值
+    const openCreatorCustom = () => {
+      this.creatorSub.textContent = '创作者模式已开启：可自定义主角参数，或从第 1 关开始逐关跳过（含 Boss 关）。';
+      this.creatorNumInputs.maxHp.value = Math.round(this.maxHp);
+      this.creatorNumInputs.damage.value = Math.round(this.damage * 100) / 100;
+      this.creatorNumInputs.fireInterval.value = Math.round(this.fireInterval * 100) / 100;
+      this.creatorCustom.classList.remove('hidden');
+      // 打开面板时刷新已保存方案列表（引用 renderCreatorSchemes，由下方事件绑定后注入）
+      if (typeof this._renderCreatorSchemes === 'function') this._renderCreatorSchemes();
+    };
+    // 应用自定义参数：立即生效（血量/攻击力/攻击速度）
+    const applyCreatorParams = () => {
+      const maxHp = parseInt(this.creatorNumInputs.maxHp.value, 10);
+      const damage = parseFloat(this.creatorNumInputs.damage.value);
+      const fireInterval = parseFloat(this.creatorNumInputs.fireInterval.value);
+      if (isFinite(maxHp) && maxHp >= 1) {
+        this.maxHp = maxHp;
+        this.hp = maxHp; // 满血生效
+      }
+      if (isFinite(damage) && damage >= 0.1) this.damage = damage;
+      if (isFinite(fireInterval) && fireInterval >= 0.05) this.fireInterval = fireInterval;
+      this.updateHud();
+      this.saveCheckpoint();
+      this.creatorMsg.textContent = '参数已应用';
+      this.creatorMsg.classList.remove('error');
+    };
+    // 一键回溯：恢复进入创作者模式前未更改的原始主角参数
+    const restoreCreatorParams = () => {
+      const base = this.creatorBase || { maxHp: this.maxHp, damage: this.damage, fireInterval: this.fireInterval };
+      this.maxHp = base.maxHp;
+      this.hp = base.maxHp;
+      this.damage = base.damage;
+      this.fireInterval = base.fireInterval;
+      this.creatorNumInputs.maxHp.value = Math.round(base.maxHp);
+      this.creatorNumInputs.damage.value = Math.round(base.damage * 100) / 100;
+      this.creatorNumInputs.fireInterval.value = Math.round(base.fireInterval * 100) / 100;
+      this.updateHud();
+      this.saveCheckpoint();
+      this.creatorMsg.textContent = '已回溯到原始参数';
+      this.creatorMsg.classList.remove('error');
+    };
+    this.creatorApplyBtn.addEventListener('click', (e) => { e.stopPropagation(); applyCreatorParams(); closeCreator(); });
+    this.creatorRestoreBtn.addEventListener('click', (e) => { e.stopPropagation(); restoreCreatorParams(); closeCreator(); });
+    // 取消：关闭创作者模式面板并直接以未更改参数进入游戏（保持 creatorModeOn，开始游戏即以创作者身份）
+    this.creatorCancelBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      closeCreator();
+      try { localStorage.removeItem(this.saveKey()); } catch (err) {}
+      this.start(false);
+    });
+    // 保存方案：把当前主角参数（血量/攻击力/攻击速度）保存为一份命名方案，供后续载入
+    const creatorSchemeKey = 'daguang_creator_schemes_v1';
+    const loadCreatorSchemes = () => {
+      try {
+        const raw = localStorage.getItem(creatorSchemeKey);
+        if (!raw) return [];
+        const d = JSON.parse(raw);
+        return Array.isArray(d) ? d : [];
+      } catch (e) { return []; }
+    };
+    const persistCreatorSchemes = (list) => {
+      try { localStorage.setItem(creatorSchemeKey, JSON.stringify(list)); } catch (e) {}
+    };
+    const renderCreatorSchemes = () => {
+      const list = loadCreatorSchemes();
+      this.creatorSchemeList.innerHTML = '';
+      if (!list.length) {
+        const empty = document.createElement('p');
+        empty.className = 'creator-scheme-empty';
+        empty.textContent = '暂无已保存方案';
+        this.creatorSchemeList.appendChild(empty);
+        return;
+      }
+      for (const s of list) {
+        const row = document.createElement('div');
+        row.className = 'creator-scheme-row';
+        const nameEl = document.createElement('span');
+        nameEl.className = 'creator-scheme-name';
+        nameEl.textContent = s.name || '未命名';
+        const metaEl = document.createElement('span');
+        metaEl.className = 'creator-scheme-meta';
+        metaEl.textContent = `HP ${s.maxHp} · ATK ${s.damage} · SPD ${s.fireInterval}`;
+        const loadBtn = document.createElement('button');
+        loadBtn.className = 'btn creator-scheme-load';
+        loadBtn.textContent = '载入';
+        loadBtn.addEventListener('click', (ev) => {
+          ev.stopPropagation();
+          this.maxHp = s.maxHp;
+          this.hp = s.maxHp;
+          this.damage = s.damage;
+          this.fireInterval = s.fireInterval;
+          this.creatorNumInputs.maxHp.value = Math.round(s.maxHp);
+          this.creatorNumInputs.damage.value = Math.round(s.damage * 100) / 100;
+          this.creatorNumInputs.fireInterval.value = Math.round(s.fireInterval * 100) / 100;
+          this.updateHud();
+          this.saveCheckpoint();
+          this.creatorMsg.textContent = `已载入方案「${s.name || '未命名'}」`;
+          this.creatorMsg.classList.remove('error');
+        });
+        const delBtn = document.createElement('button');
+        delBtn.className = 'btn creator-scheme-del';
+        delBtn.textContent = '删除';
+        delBtn.addEventListener('click', (ev) => {
+          ev.stopPropagation();
+          const next = loadCreatorSchemes().filter((x) => x !== s);
+          persistCreatorSchemes(next);
+          renderCreatorSchemes();
+        });
+        row.appendChild(nameEl);
+        row.appendChild(metaEl);
+        row.appendChild(loadBtn);
+        row.appendChild(delBtn);
+        this.creatorSchemeList.appendChild(row);
+      }
+    };
+    const saveCreatorScheme = () => {
+      const name = (this.creatorSaveInput.value || '').trim() || `方案${loadCreatorSchemes().length + 1}`;
+      const list = loadCreatorSchemes();
+      // 同名覆盖：保留最新一份
+      const existingIdx = list.findIndex((x) => x.name === name);
+      const entry = { name, maxHp: this.maxHp, damage: this.damage, fireInterval: this.fireInterval };
+      if (existingIdx >= 0) list[existingIdx] = entry; else list.push(entry);
+      persistCreatorSchemes(list);
+      renderCreatorSchemes();
+      this.creatorMsg.textContent = `已保存方案「${name}」`;
+      this.creatorMsg.classList.remove('error');
+      // 保存成功后回到大厅界面（保持 creatorModeOn，之后点击开始游戏即以创作者身份开始）
+      closeCreator();
+    };
+    this.creatorSaveBtn.addEventListener('click', (e) => { e.stopPropagation(); saveCreatorScheme(); });
+    this.creatorSaveInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); saveCreatorScheme(); }
+    });
+    // 复制本游戏源码：把 game/ 目录下所有源文件合并为一段文本复制到剪贴板
+    const copyGameSource = async () => {
+      const files = [
+        { path: 'index.html', label: 'index.html' },
+        { path: 'main.js', label: 'main.js' },
+        { path: 'styles.css', label: 'styles.css' },
+        { path: 'game.js', label: 'game.js' },
+      ];
+      const parts = [];
+      for (const f of files) {
+        try {
+          const res = await fetch(f.path, { cache: 'no-store' });
+          if (!res.ok) throw new Error(String(res.status));
+          const text = await res.text();
+          parts.push(`/* ===== ${f.label} ===== */\n${text}\n`);
+        } catch (err) {
+          parts.push(`/* ===== ${f.label}（加载失败） ===== */\n`);
+        }
+      }
+      const src = parts.join('\n');
+      let ok = false;
+      try {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          await navigator.clipboard.writeText(src);
+          ok = true;
+        }
+      } catch (err) { ok = false; }
+      if (!ok) {
+        // 降级：临时 textarea + execCommand
+        try {
+          const ta = document.createElement('textarea');
+          ta.value = src;
+          ta.style.position = 'fixed';
+          ta.style.left = '-9999px';
+          ta.style.top = '0';
+          document.body.appendChild(ta);
+          ta.focus();
+          ta.select();
+          ok = document.execCommand('copy');
+          document.body.removeChild(ta);
+        } catch (err) { ok = false; }
+      }
+      this.creatorMsg.textContent = ok ? '源码已复制到剪贴板' : '复制失败，请手动复制';
+      this.creatorMsg.classList.toggle('error', !ok);
+    };
+    this.creatorCopySrcBtn.addEventListener('click', (e) => { e.stopPropagation(); copyGameSource(); });
+    // 暴露给 openCreatorCustom（在下方定义之前调用）
+    this._renderCreatorSchemes = renderCreatorSchemes;
+    this.creatorConfirm.addEventListener('click', () => {
+      if (this.creatorModeOn) {
+        // 已开启：点击确认即应用当前输入的参数
+        applyCreatorParams();
+        return;
+      }
+      if (this.creatorInput.value.trim() === '123789') {
+        this.creatorModeOn = true;
+        openCreatorCustom();
+        this.refreshHall();
+      } else {
+        this.creatorMsg.textContent = '密码错误，请重试';
+        this.creatorMsg.classList.add('error');
+      }
+    });
+    this.creatorInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') this.creatorConfirm.click();
+    });
+    this.startScreen.addEventListener('pointerdown', (e) => {
+      // 点击弹层外区域关闭（不拦截按钮点击）
+      if (this.creatorScreen.classList.contains('hidden')) return;
+      if (this.creatorScreen.contains(e.target)) return;
+      closeCreator();
+    });
+    this.hallBtns.start.addEventListener('click', () => {
+      try { localStorage.removeItem(this.saveKey()); } catch (e) {}
+      this.start(false);
+    });
+    // 源码查看弹窗逻辑
+    const srcCache = {};
+    const loadSrcFile = async (name) => {
+      if (srcCache[name]) return srcCache[name];
+      const res = await fetch(name + '?t=' + Date.now());
+      if (!res.ok) throw new Error(name + ' 加载失败: ' + res.status);
+      const text = await res.text();
+      srcCache[name] = text;
+      return text;
+    };
+    const showSrc = async (name) => {
+      this.srcContent.textContent = '加载中...';
+      try {
+        this.srcContent.textContent = await loadSrcFile(name);
+      } catch (e) {
+        this.srcContent.textContent = '❌ ' + e.message + '\n\n提示：需通过本地服务器打开（如 python -m http.server），file:// 协议下 fetch 会被拦截。';
+      }
+    };
+    const openSrcModal = () => {
+      this.srcSelect.value = 'index.html';
+      this.srcModal.classList.remove('hidden');
+      showSrc('index.html');
+    };
+    const closeSrcModal = () => {
+      this.srcModal.classList.add('hidden');
+    };
+    this.startScreen.querySelector('[data-hall="srcview"]').addEventListener('click', (e) => {
+      e.stopPropagation();
+      openSrcModal();
+    });
+    this.srcSelect.addEventListener('change', (e) => showSrc(e.target.value));
+    this.srcCopyBtn.addEventListener('click', async () => {
+      const text = this.srcContent.textContent;
+      let ok = false;
+      try {
+        await navigator.clipboard.writeText(text);
+        ok = true;
+      } catch (err) {
+        try {
+          const ta = document.createElement('textarea');
+          ta.value = text;
+          ta.style.position = 'fixed';
+          ta.style.opacity = '0';
+          document.body.appendChild(ta);
+          ta.select();
+          document.execCommand('copy');
+          document.body.removeChild(ta);
+          ok = true;
+        } catch (err2) { ok = false; }
+      }
+      this.srcMsg.textContent = ok ? '已复制' : '复制失败，请手动复制';
+      this.srcMsg.classList.toggle('error', !ok);
+    });
+    this.srcCloseBtn.addEventListener('click', closeSrcModal);
+    this.srcModal.addEventListener('pointerdown', (e) => {
+      if (e.target === this.srcModal) closeSrcModal();
+    });
+    this.hallBtns.continue.addEventListener('click', () => {
+      const save = this.loadCheckpoint();
+      if (save) this.start(save);
+    });
+    this.hallBtns.creator.addEventListener('click', () => {
+      if (this.creatorModeOn) {
+        // 已开启：从第 1 关开始游戏，之后通过「跳过关卡」按钮逐关推进（不再直达最终 Boss）
+        try { localStorage.removeItem(this.saveKey()); } catch (e) {}
+        this.start(false);
+        return;
+      }
+      this.creatorMsg.textContent = '';
+      this.creatorMsg.classList.remove('error');
+      this.creatorInput.value = '';
+      this.creatorScreen.classList.remove('hidden');
+      this.creatorInput.focus();
+    });
+    this.refreshHall();
+    this.restartBtn.addEventListener('click', () => {
+      try { localStorage.removeItem(this.saveKey()); } catch (e) {}
+      this.start(false);
+    });
+    // 结束页：回到大厅
+    const backBtn = document.createElement('button');
+    backBtn.className = 'btn restart-btn';
+    backBtn.textContent = '回到大厅';
+    backBtn.addEventListener('click', () => this.backToHall());
+    this.overScreen.appendChild(backBtn);
+
+    window.addEventListener('keydown', this.onKeyDown);
+    window.addEventListener('keyup', this.onKeyUp);
+    this.canvas.addEventListener('pointerdown', this.onPointerDown);
+    this.canvas.addEventListener('pointermove', this.onPointerMove);
+    window.addEventListener('pointerup', this.onPointerUp);
+    window.addEventListener('pointercancel', this.onPointerUp);
+
+    this.resize();
+    window.addEventListener('resize', () => this.resize());
+
+    // 预加载素材
+    Promise.all([
+      loadImage(ASSETS.hero),
+      loadImage(ASSETS.monsterRed),
+      loadImage(ASSETS.monsterGreen),
+      loadImage(ASSETS.monsterPurple),
+      loadImage(ASSETS.bossExtreme),
+      loadImage(ASSETS.bg),
+      loadImage(ASSETS.bossReaper),
+      loadImage(ASSETS.bgReaper),
+      loadImage(ASSETS.eliteBoar),
+      loadImage(ASSETS.eliteGoblin),
+    ]).then(([hero, red, green, purple, extreme, bg, reaper, bgReaper, eliteBoar, eliteGoblin]) => {
+      this.images.hero = hero;
+      this.images.red = red;
+      this.images.green = green;
+      this.images.purple = purple;
+      this.images.extreme = extreme;
+      this.images.bg = bg;
+      this.images.bossReaper = reaper;
+      this.images.bgReaper = bgReaper;
+      this.images[ASSETS.eliteBoar] = eliteBoar;
+      this.images[ASSETS.eliteGoblin] = eliteGoblin;
+      MONSTER_TYPES[0].imgObj = red;
+      MONSTER_TYPES[1].imgObj = green;
+      MONSTER_TYPES[2].imgObj = purple;
+      this.render();
+    });
+  }
+
+  resize() {
+    const rect = this.root.getBoundingClientRect();
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    this.W = Math.max(1, rect.width);
+    this.H = Math.max(1, rect.height);
+    this.canvas.width = Math.round(this.W * dpr);
+    this.canvas.height = Math.round(this.H * dpr);
+    this.canvas.style.width = this.W + 'px';
+    this.canvas.style.height = this.H + 'px';
+    this.ctx = this.canvas.getContext('2d');
+    this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    if (this.state === 'playing') this.resetWorld();
+    this.render();
+  }
+
+  // ---------- 状态 ----------
+  resetWorld() {
+    this.player = { x: this.W / 2, y: this.H - 150, w: 64, h: 64 };
+    this.hp = 5;
+    this.maxHp = 5;
+    this.level = 1;
+    this.exp = 0;
+    this.expNeed = 30;
+    this.score = 0;
+    this.kills = 0;
+    this.damage = 1;
+    this.fireInterval = 0.5;
+    this.fireCd = 0;
+    this.time = 0;
+    this.spawnTimer = 0;
+    this.bullets = [];
+    this.monsters = [];
+    this.coins = [];
+    this.potions = [];
+    this.particles = [];
+    this.floatingTexts = [];
+    this.shake = 0;
+    // 波次强化：每 10 级触发一次，怪物更快更多 + 全屏闪光提示
+    this.waveLevel = 0; // 当前波次（每 10 级 +1）
+    this.waveFlash = 0; // 波次强化闪光计时
+    // 关卡推进状态：1~5 为小怪关（第 1 关即初始打怪），击败伪·永恒后进入第 2 关，通关第 5 关进入最终 Boss「极限」
+    this.stage = 1; // 当前小怪关（1..MAX_STAGE）
+    this.bossDefeatedOnce = false; // 是否已击败过伪·永恒（用于进入后续关卡）
+    // 第 2、3 关通关条件：本关额外击杀进度
+    this.stageKills = 0; // 本关累计击杀
+    // 精英怪召唤节奏（第 4 关）
+    // Boss 关状态
+    this.boss = null; // null | { name, hp, maxHp, x, y, r, phase, flash, attackCd }
+    this.bossPhase = 'normal'; // normal | boss | pseudo | extreme | reaper
+    this.bossTriggered = false;
+    this.bossBanner = 0; // Boss 登场提示计时
+    this.bossBannerText = '';
+    this.bossHud.classList.add('hidden');
+    this.stageProgress.classList.add('hidden');
+    // Eternity 全屏能量波状态
+    this.waveTimer = WAVE_INTERVAL; // 距离下一次释放的倒计时
+    this.waveWarning = 0; // 预警计时（>0 表示正在蓄力）
+    this.waveHit = false; // 本波是否已结算伤害
+    // 伪·永恒光波状态
+    this.pseudoCd = PSEUDO_INTERVAL; // 距离下一次攻击的倒计时
+    this.pseudoCharge = 0; // 蓄力计时（>0 表示正在蓄力，保持不动）
+    // 最终 Boss「极限」状态：炮弹发射节奏 + 杀戮领域（半血启动，期间主角不可用技能）
+    this.extremeShotCd = EXTREME_SHOT_INTERVAL; // 距离下一次炮弹的倒计时
+    this.killField = false; // 杀戮领域是否已启动（半血触发）
+    // 「极限」陨石：投掷节奏 + 落点预警列表（预先标出位置与范围）
+    this.meteorCd = METEOR_INTERVAL;
+    this.meteors = [];
+    // 第 6 关精英关卡：精英怪列表 + 向主角方向发射的直线弹丸 + 治疗药水掉落
+    this.elites = [];
+    this.eliteProjectiles = []; // 精英怪弹丸：{ x, y, vx, vy, r, dmg }
+    this.potions = []; // 治疗药水：{ x, y, vy, type: 'instant'|'slow', value, duration, life }
+    // 伪最终 Boss「死神」状态：三种攻击计时器 + 诅咒/定身/黑洞
+    this.reaperSlashCd = REAPER_SLASH_INTERVAL;   // 闪现横劈倒计时
+    this.reaperSlashWarn = 0;                     // 横劈预警计时（>0 表示正在预警）
+    this.reaperRiftCd = REAPER_RIFT_INTERVAL;     // 裂缝攻击检查倒计时
+    this.reaperRiftCharge = 0;                    // 裂缝蓄力计时（>0 表示正在蓄力）
+    this.reaperBlackholeCd = REAPER_BLACKHOLE_INTERVAL; // 黑洞释放倒计时
+    this.reaperBlackhole = null;                  // null | { x, y, life, pulled }
+    this.reaperBeams = [];                        // 黑洞未吸入时射出的八道光线
+    this.bossProjectiles = [];                    // 进化Boss 向主角发射的直线弹丸
+    this.slowFieldActive = 0;                     // 缓行领域剩余时长（进化Boss 复活后释放）
+    this.slowFieldElapsed = 0;                    // 缓行领域已持续时长（用于逐渐变慢）
+    this.slowFieldBlockUsed = false;              // 缓行领域中是否已触发一次格挡
+    this.slowFactor = 1;                          // 当前移动/射击速度系数（1 -> 0.45）
+    this.evolvedInvulnRemaining = 0;           // Boss 复活金身剩余时长（期间 Boss 不受伤害且不攻击）
+    this.curseTimer = 0;                          // 诅咒剩余时长
+    this.curseTick = 0;                           // 诅咒每 1s 扣血计时
+    this.stunTimer = 0;                           // 主角定身剩余时长（被黑洞吸入）
+    this.bgReaperAlpha = 0;                       // 死神背景显现透明度
+    // 技能体系状态：active=剩余激活时长，cd=剩余冷却
+    this.skillDefenseActive = 0;
+    this.skillDefenseCd = 0;
+    this.skillChargeActive = 0;
+    this.skillChargeCd = 0;
+    this.skillUltActive = 0;
+    this.skillUltCd = 0;
+    this.ultFireTimer = 0; // 大招额外两列子弹发射节奏
+    // 被动卡牌三选一状态（第一次 Boss 关结束后选择）
+    this.passiveChosen = null; // null | 'break' | 'control' | 'spring'
+    this.passivePending = false; // 是否正在等待玩家选择（暂停游戏）
+    this.breakUsedThisStage = false; // 破釜沉舟本关是否已触发（每关限一次）
+    this.controlActive = 0; // 控制领域剩余激活时长
+    this.springActive = 0; // 弹簧陷阱剩余激活时长
+    // 副武器状态（第二关结束后三选一生效）
+    this.weaponChosen = null; // null | 'rifle' | 'smg' | 'pistol'
+    this.weaponPending = false; // 是否正在等待玩家选择（暂停游戏）
+    this.weaponFireCd = 0; // 副武器独立射击冷却
+    // 魔法导师剧情状态（半互动式对话，触发时暂停游戏）
+    this.storyPending = false; // 对话是否正在显示（暂停游戏）
+    this.storyQueue = []; // 当前场景剩余对话步骤
+    this.storyOnDone = null; // 对话结束后的回调
+    this.storySceneDone = {}; // 已播放过的剧情场景标记，避免重复
+    this.blessingChosen = null; // 开场祝福选择：null | 'power' | 'vitality'
+    // 创作者模式：记录进入创作者模式前未更改的原始主角参数（血量/攻击力/攻击速度），供一键回溯使用
+    this.creatorBase = { maxHp: this.maxHp, damage: this.damage, fireInterval: this.fireInterval };
+    this.updateSkillBar();
+    this.updateWeaponPanel();
+    this.updateStageProgressHud();
+    this.weaponPanel.classList.add('hidden');
+  }
+
+  start(fromSave) {
+    this.resetWorld();
+    if (fromSave && fromSave.stage) {
+      this.applySave(fromSave);
+    }
+    this.state = 'playing';
+    this.startScreen.classList.add('hidden');
+    this.overScreen.classList.add('hidden');
+    this.passiveScreen.classList.add('hidden');
+    // 全新开局：先播魔法导师的开场剧情（继续存档的老玩家不再重复）
+    if (!fromSave) {
+      this.showStory('intro', [
+        { step: 1, text: '终于来了，年轻的魔法学徒。我是艾泽尔——你的魔法导师。' },
+        { step: 1, text: '三百年封印松动，魔物正从深渊涌出。去吧，用你的魔法弹把它们打回去！' },
+        { step: 1, text: '临行前，收下我的一份祝福吧——它会陪你走完整个旅程。', choices: true },
+        { step: 1, text: '好眼光！记住：升级、拾取药剂、别被围住。路上见，孩子。' },
+      ]);
+    }
+    this.weaponScreen.classList.add('hidden');
+    this.creatorScreen.classList.add('hidden');
+    this.lastT = performance.now();
+    cancelAnimationFrame(this.raf);
+    this.raf = requestAnimationFrame(this.loop);
+    this.updateSkipBtn();
+  }
+
+  // （已废弃：创作者模式不再直达最终 Boss「死神」关，改为从第 1 关开始逐关推进）
+
+  // ---------- 第 6 关精英关卡 ----------
+  // 精英怪分两波出场：第一波 3 只、第二波 3 只；每只不重叠、随机新角色、随机血（剩余血量标在身上）；
+  // 精英怪向主角所处方向发射沿直线飞行的弹丸，命中造成伤害；
+  // 只有第二波且场上仅剩 1 只时才进入狂暴状态加快发射弹丸（第一波不触发）。
+  spawnEliteBattle() {
+    this.boss = null;
+    this.bossPhase = null;
+    this.bossHud.classList.add('hidden');
+    this.stageProgress.classList.remove('hidden');
+    // 完整重置第 6 关所有状态：波次、场上对象、计时器，彻底避免开局因残留数据卡死
+    this.eliteWave = 0; // 当前波次：0 | 1 | 2（0 表示尚未进入任何波次，第一波由 updateEliteBattle 统一刷出，确保进入关卡时不会因旧值残留而跳过首波）
+    this.elites = [];
+    this.eliteProjectiles = [];
+    this.potions = [];
+    this.monsters = [];
+    this.bullets = [];
+    this.coins = [];
+    this.particles = [];
+    this.floatingTexts = [];
+    this.spawnTimer = 0;
+    this.stageKills = 0;
+    this.updateStageProgressHud();
+    // 第一波由 updateEliteBattle 统一按固定槽位刷出（确保进入关卡时不会因旧值残留而跳过首波）
+    this.bossBanner = 2.4;
+    this.bossBannerText = '第 6 关 · 精英关卡';
+    this.addFloat(this.W / 2, this.H / 2 - 40, '精英关卡！', '#ffd24a');
+  }
+
+  // 生成一波精英怪（count 只）：按固定槽位生成，确保不重叠且不会因随机检测失败卡死
+  spawnEliteWave(count) {
+    const W = this.W, H = this.H;
+    const slots = [
+      { x: W * 0.25, y: H * 0.22 },
+      { x: W * 0.5, y: H * 0.3 },
+      { x: W * 0.75, y: H * 0.22 },
+    ];
+    for (let i = 0; i < count && i < slots.length; i++) {
+      const role = ELITE_ROLES[Math.floor(Math.random() * ELITE_ROLES.length)];
+      const maxHp = 300 + Math.floor(Math.random() * 201); // 随机 300~500 血
+      this.elites.push({
+        x: slots[i].x, y: slots[i].y, r: 44,
+        hp: maxHp, maxHp,
+        img: role.img, color: role.color,
+        shotTimer: 1.2 + Math.random() * 1.6, // 首次发射弹丸节奏错开
+        enraged: false,
+      });
+    }
+  }
+
+  // 第一波全部被击败后进入第二波（带防重复触发保护）
+  startEliteWave2() {
+    if (this.eliteWave !== 1) return; // 防止同帧或跨帧重复触发
+    this.eliteWave = 2;
+    this.eliteProjectiles = []; // 清空第一波残留弹丸，避免跨波次残留
+    this.spawnEliteWave(ELITE_WAVE2_COUNT);
+    this.addFloat(this.W / 2, this.H / 2 - 40, '第二波精英怪来袭！', '#ff9ae6');
+  }
+
+  updateEliteBattle(dt) {
+    const p = this.player;
+    if (!p || !isFinite(p.x) || !isFinite(p.y)) return; // 主角状态异常时跳过本帧，防止卡死
+    const leftCount = this.elites.length;
+    // 第一波尚未登场（波次为 0）：立即按固定槽位刷出第一波 3 只精英怪
+    if (this.eliteWave === 0) {
+      this.eliteWave = 1;
+      this.spawnEliteWave(ELITE_WAVE1_COUNT);
+      return; // 本帧已刷出第一波，直接返回，避免同帧内重复处理
+    }
+    // 第一波全部被击败后进入第二波（仅当波次为 1 且场上无精英怪时触发一次）
+    if (this.eliteWave === 1 && leftCount === 0) {
+      this.startEliteWave2();
+      return; // 本帧已刷出第二波，直接返回，避免同帧内重复处理
+    }
+    // 精英怪持续存活：每只独立计时周期性向主角发射弹丸；发射动作不会移除精英怪本身
+    for (let i = 0; i < this.elites.length; i++) {
+      const e = this.elites[i];
+      if (!e || !isFinite(e.shotTimer)) e.shotTimer = ELITE_PROJECTILE_INTERVAL;
+      // 只有第二波且场上仅剩 1 只时才进入狂暴状态（第一波不触发）
+      e.enraged = this.eliteWave === 2 && leftCount <= ELITE_ENRAGE_LEFT;
+      e.shotTimer -= dt;
+      if (e.shotTimer <= 0) {
+        this.fireEliteProjectile(e);
+        // 发射后重置计时器，精英怪继续存活等待下一轮发射
+        e.shotTimer = e.enraged ? ELITE_PROJECTILE_ENRAGE_INTERVAL : ELITE_PROJECTILE_INTERVAL;
+      }
+    }
+    // 玩家子弹命中精英怪：扣精英怪血量、显示受击闪白与伤害飘字；主角不受该次攻击影响
+    for (let i = this.elites.length - 1; i >= 0; i--) {
+      const e = this.elites[i];
+      if (!e) continue;
+      let hit = false;
+      for (let j = this.bullets.length - 1; j >= 0; j--) {
+        const b = this.bullets[j];
+        if (!b || b.fromBoss) continue;
+        const dx = b.x - e.x, dy = b.y - e.y;
+        if (dx * dx + dy * dy < (e.r + b.r) * (e.r + b.r)) {
+          this.bullets.splice(j, 1);
+          e.hp -= b.dmg;
+          e.flash = 0.1;
+          this.addFloat(b.x, b.y, `-${b.dmg}`, '#ffd24a');
+          hit = true;
+          break;
+        }
+      }
+      if (hit && e.hp <= 0) {
+        this.killElite(i);
+      }
+    }
+    // 精英怪弹丸：沿直线飞行，命中主角执行完整伤害判定并立即销毁；飞出屏幕边界即移除，避免残留卡死
+    for (let i = this.eliteProjectiles.length - 1; i >= 0; i--) {
+      const pr = this.eliteProjectiles[i];
+      // 安全兜底：弹丸对象损坏（NaN/Infinity）时直接移除，防止卡死
+      if (!pr || !isFinite(pr.x) || !isFinite(pr.y) || !isFinite(pr.vx) || !isFinite(pr.vy)) {
+        this.eliteProjectiles.splice(i, 1);
+        continue;
+      }
+      pr.x += pr.vx * dt;
+      pr.y += pr.vy * dt;
+      // 移动后再次校验：若因数值溢出导致 NaN/Infinity，立即移除
+      if (!isFinite(pr.x) || !isFinite(pr.y)) {
+        this.eliteProjectiles.splice(i, 1);
+        continue;
+      }
+      // 飞出屏幕边界：立即移除，不残留
+      if (pr.x < -40 || pr.x > this.W + 40 || pr.y < -40 || pr.y > this.H + 40) {
+        this.eliteProjectiles.splice(i, 1);
+        continue;
+      }
+      // 与主角碰撞判定：命中后主角扣血、受击反馈并立即销毁该弹丸（精英怪弹丸只伤害主角，不作用于精英怪自身）
+      const dx = pr.x - p.x;
+      const dy = pr.y - p.y;
+      const hitR = pr.r + p.w / 2;
+      if (dx * dx + dy * dy < hitR * hitR) {
+        this.eliteProjectiles.splice(i, 1); // 无论是否金身，命中即销毁弹丸
+        if (this.isInvincible()) {
+          this.addFloat(p.x, p.y - p.w / 2 - 10, '免疫', '#ffd24a');
+          continue;
+        }
+        this.hp -= pr.dmg;
+        this.shake = 10;
+        this.addFloat(p.x, p.y - p.w / 2 - 10, `-${pr.dmg} HP`, '#ff7a5a');
+        this.spawnParticles(pr.x, pr.y, '#ff9a3c', 8);
+        if (this.hp <= 0) {
+          this.hp = 0;
+          this.gameOver(false);
+          return;
+        }
+      }
+    }
+  }
+
+  // 精英怪向主角所处方向发射沿直线飞行的弹丸（含异常数据兜底，防止 NaN/Infinity 导致卡死）
+  fireEliteProjectile(e) {
+    const p = this.player;
+    if (!p || !isFinite(p.x) || !isFinite(p.y)) return;
+    if (!isFinite(e.x) || !isFinite(e.y)) return;
+    const dx = p.x - e.x, dy = p.y - e.y;
+    const d = Math.max(1, Math.hypot(dx, dy));
+    if (!isFinite(d) || d <= 0) return;
+    const vx = (dx / d) * ELITE_PROJECTILE_SPEED;
+    const vy = (dy / d) * ELITE_PROJECTILE_SPEED;
+    if (!isFinite(vx) || !isFinite(vy)) return;
+    this.eliteProjectiles.push({
+      x: e.x, y: e.y, vx, vy,
+      r: ELITE_PROJECTILE_R,
+      dmg: ELITE_PROJECTILE_DMG,
+    });
+  }
+
+  killElite(idx) {
+    const e = this.elites[idx];
+    this.elites.splice(idx, 1);
+    this.spawnParticles(e.x, e.y, e.color, 22);
+    this.gainScore(50);
+    this.stageKills++;
+    this.addFloat(e.x, e.y, `+50`, '#ffd24a');
+    // 精英怪低概率掉落治疗药水（回复较低，分瞬时与缓慢两种，缓慢回复多）
+    if (Math.random() < 0.3) {
+      const isInstant = Math.random() < 0.3; // 瞬时回复少（30%），缓慢回复多（70%）
+      const type = isInstant ? 'instant' : 'slow';
+      const value = isInstant ? 2 : 1; // 瞬时回复少、单次 2 点；缓慢回复多、每秒 1 点持续 3s
+      const duration = isInstant ? 0 : 3; // 缓慢回复持续 3s
+      this.potions.push({ x: e.x, y: e.y, vy: 80, type, value, duration, life: 8 });
+      this.addFloat(e.x, e.y - 20, type === 'instant' ? '瞬时药水!' : '缓慢药水!', '#7ee6a0');
+    }
+    if (this.stageKills >= STAGE_KILL_GOAL[ELITE_BATTLE_STAGE]) {
+      // 击败 4 只精英怪 -> 通关第 6 关，进入伪最终 Boss「死神」关
+      this.eliteProjectiles = [];
+      this.elites = [];
+      this.addFloat(this.W / 2, this.H / 2 - 40, '第 6 关通关！', '#ffd24a');
+      this.enterNextStage();
+    } else {
+      this.updateStageProgressHud();
+    }
+  }
+
+  // ---------- 存档点 ----------
+  saveKey() { return 'daguang_save_v1'; }
+  saveCheckpoint() {
+    try {
+      const data = {
+        stage: this.stage,
+        bossPhase: this.boss ? this.bossPhase : null,
+        bossName: this.boss ? this.boss.name : null,
+        level: this.level, exp: this.exp, expNeed: this.expNeed,
+        hp: this.hp, maxHp: this.maxHp,
+        damage: this.damage, fireInterval: this.fireInterval,
+        score: this.score, kills: this.kills,
+        passiveChosen: this.passiveChosen,
+        weaponChosen: this.weaponChosen,
+        time: this.time,
+      };
+      localStorage.setItem(this.saveKey(), JSON.stringify(data));
+    } catch (e) { /* ignore */ }
+  }
+  loadCheckpoint() {
+    try {
+      const raw = localStorage.getItem(this.saveKey());
+      if (!raw) return null;
+      const d = JSON.parse(raw);
+      if (!d || !d.stage) return null;
+      return d;
+    } catch (e) { return null; }
+  }
+  applySave(d) {
+    this.stage = d.stage || 1;
+    this.level = d.level || 1;
+    this.exp = d.exp || 0;
+    this.expNeed = d.expNeed || 30;
+    this.hp = d.hp != null ? d.hp : this.maxHp;
+    this.maxHp = d.maxHp || this.maxHp;
+    this.damage = d.damage || this.damage;
+    this.fireInterval = d.fireInterval || this.fireInterval;
+    this.score = d.score || 0;
+    this.kills = d.kills || 0;
+    this.time = d.time || 0;
+    this.passiveChosen = d.passiveChosen || null;
+    this.weaponChosen = d.weaponChosen || null;
+    this.updateWeaponPanel();
+    if (this.weaponChosen) this.weaponPanel.classList.remove('hidden');
+    // Boss 关存档：直接重生对应 Boss
+    if (d.bossPhase === 'boss') this.spawnBoss();
+    else if (d.bossPhase === 'pseudo') { this.spawnBoss(); this.transformToPseudo(); }
+    else if (d.bossPhase === 'reaper') this.spawnReaperBoss();
+    else if (d.bossPhase === 'evolved') this.spawnEvolvedBoss();
+    else if (d.bossPhase === 'extreme') this.spawnExtremeBoss();
+    else {
+      // 小怪关：进入对应关卡（重置本关击杀进度）
+      this.stageKills = 0;
+      this.eliteSpawnTimer = ELITE_SPAWN_INTERVAL;
+      if (this.stage >= 2) this.damage = Math.max(this.damage, 5);
+      const goal = STAGE_KILL_GOAL[this.stage];
+      this.addFloat(this.W / 2, this.H / 2 - 20, `继续 · 第 ${this.stage} 关`, '#7ee6ff');
+    }
+    this.updateSkillBar();
+    this.updateStageProgressHud();
+    this.updateHud();
+  }
+  stageLabel() {
+    if (this.boss) return `Boss · ${this.boss.name}`;
+    return `第 ${this.stage} 关`;
+  }
+  refreshHall() {
+    const save = this.loadCheckpoint();
+    const hallPos = this.hallPos;
+    const hallBtns = this.hallBtns;
+    if (!hallPos || !hallBtns) return;
+    if (save) {
+      hallPos.textContent = save.bossName ? `已到达 · Boss「${save.bossName}」` : `已到达 · 第 ${save.stage} 关`;
+      hallBtns.continue.disabled = false;
+      hallBtns.continue.textContent = '继续挑战';
+    } else {
+      hallPos.textContent = '尚无进度 · 从第 1 关开始';
+      hallBtns.continue.disabled = true;
+      hallBtns.continue.textContent = '继续挑战';
+    }
+  }
+  backToHall() {
+    this.state = 'idle';
+    cancelAnimationFrame(this.raf);
+    this.raf = 0;
+    this.bossHud.classList.add('hidden');
+    this.overScreen.classList.add('hidden');
+    this.passiveScreen.classList.add('hidden');
+    this.weaponScreen.classList.add('hidden');
+    this.creatorScreen.classList.add('hidden');
+    this.startScreen.classList.remove('hidden');
+    this.refreshHall();
+    this.render();
+  }
+
+  gameOver(victory) {
+    this.state = 'over';
+    cancelAnimationFrame(this.raf);
+    this.raf = 0;
+    this.bossHud.classList.add('hidden');
+    const q = (k) => this.overScreen.querySelector(`[data-k="${k}"]`);
+    q('overTitle').textContent = victory ? '挑战胜利' : '挑战结束';
+    q('lv').textContent = this.level;
+    q('kill').textContent = this.kills;
+    q('score').textContent = this.score;
+    this.overScreen.classList.remove('hidden');
+    this.updateSkipBtn();
+    this.render();
+  }
+
+  loop = (t) => {
+    if (this.state !== 'playing' || this.passivePending || this.weaponPending || this.storyPending) return;
+    let dt = (t - this.lastT) / 1000;
+    this.lastT = t;
+    if (dt > 0.05) dt = 0.05;
+    this.update(dt);
+    this.render();
+    this.raf = requestAnimationFrame(this.loop);
+  };
+
+  // ---------- Boss 关 ----------
+  spawnBoss() {
+    const cfg = BOSS_ETERNITY;
+    this.boss = {
+      name: cfg.name,
+      hp: cfg.hp,
+      maxHp: cfg.hp,
+      x: this.W / 2,
+      y: 120,
+      r: 70,
+      phase: 0,
+      flash: 0,
+      attackCd: 2,
+    };
+    this.bossPhase = 'boss';
+    this.bossBanner = 2.4;
+    this.bossBannerText = 'BOSS · Eternity';
+    this.bossHud.classList.remove('hidden');
+    this.bossHud.querySelector('[data-k="bossName"]').textContent = cfg.name;
+    this.updateBossHud();
+    this.saveCheckpoint();
+    this.addFloat(this.W / 2, this.H / 2 - 40, 'BOSS 登场！', '#ff5ad0');
+  }
+
+  transformToPseudo() {
+    // Eternity 消失，转化为伪·永恒
+    const bx = this.boss.x;
+    const by = this.boss.y;
+    for (let i = 0; i < 40; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const sp = 80 + Math.random() * 260;
+      this.particles.push({
+        x: bx, y: by,
+        vx: Math.cos(a) * sp, vy: Math.sin(a) * sp,
+        life: 0.6 + Math.random() * 0.4, color: '#b58cff', size: 3 + Math.random() * 5,
+      });
+    }
+    const cfg = BOSS_PSEUDO;
+    this.boss = {
+      name: cfg.name,
+      hp: cfg.hp,
+      maxHp: cfg.hp,
+      x: this.W / 2,
+      y: 140,
+      r: 56,
+      phase: 0,
+      flash: 0,
+      attackCd: 1.5,
+    };
+    this.bossPhase = 'pseudo';
+    this.pseudoCd = PSEUDO_INTERVAL; // 首次攻击前等待一个完整间隔
+    this.pseudoCharge = 0;
+    this.bossBanner = 2.4;
+    this.bossBannerText = '伪·永恒';
+    this.bossHud.querySelector('[data-k="bossName"]').textContent = cfg.name;
+    this.updateBossHud();
+    this.saveCheckpoint();
+    this.addFloat(this.W / 2, this.H / 2 - 40, '转化为 伪·永恒', '#eafcff');
+  }
+
+  // 击败伪·永恒后进入下一关：第 2~3 关小怪关，通关第 3 关强制进入 Boss「极限」；击败极限后进入第 4~5 关小怪关，通关第 5 关进入伪最终 Boss「死神」
+  enterNextStage() {
+    // 清空场上残留怪物/子弹/金币，保留玩家成长与分数
+    this.monsters = [];
+    this.bullets = [];
+    this.coins = [];
+    this.potions = [];
+    this.spawnTimer = 0;
+    const nextStage = this.stage + 1;
+    if (nextStage > MAX_STAGE) {
+      // 已通关第 5 关 -> 进入伪最终 Boss 关「死神」（背景随出场显现）
+      this.spawnReaperBoss();
+      return;
+    }
+    // 第 3 关结束后强制进入 Boss「极限」战（不再先打第 4、5 关）
+    if (this.stage === 3) {
+      this.spawnExtremeBoss();
+      return;
+    }
+    this.stage = nextStage;
+    // 进入新关卡时重置本关击杀进度与精英怪刷新节奏
+    this.stageKills = 0;
+    this.eliteSpawnTimer = ELITE_SPAWN_INTERVAL;
+    this.saveCheckpoint(); // 存档点：进入新关卡自动记录
+    // 进入第 2 关时：初始攻击为 5，之后每升一级 +1.5（覆盖第 1 关的 +20% 成长）
+    if (this.stage === 2) {
+      this.damage = 5;
+    }
+    // 第二关结束后弹出副武器三选一（首次进入第 3 关时触发）；创作者模式跳过关卡时直接赋予，不弹出三选一界面
+    if (this.stage === 3 && !this.weaponChosen) {
+      if (this.creatorModeOn) {
+        // 创作者模式：直接赋予突击步枪（不暂停游戏、不弹出三选一）
+        this.weaponChosen = 'rifle';
+        this.weaponPending = false;
+        this.weaponScreen.classList.add('hidden');
+        this.weaponPanel.classList.remove('hidden');
+        this.updateWeaponPanel();
+        const w = SECONDARY_WEAPONS['rifle'];
+        this.addFloat(this.W / 2, this.H / 2 - 40, `获得副武器 · ${w.name}`, '#ffd24a');
+      } else {
+        this.showWeaponSelect();
+      }
+    }
+    // 破釜沉舟：每关限一次，进入新关卡重置
+    this.breakUsedThisStage = false;
+    this.waveFlash = 0.9;
+    const goal = STAGE_KILL_GOAL[this.stage];
+    const bannerText = goal ? `第 ${this.stage} 关 · 击败 ${goal} 只怪物通关！` : (this.stage === ELITE_STAGE ? `第 ${this.stage} 关 · 精英怪登场！` : `第 ${this.stage} 关 · 怪物更厚更多！`);
+    this.addFloat(this.W / 2, this.H / 2 - 20, bannerText, '#ff9a5a');
+    for (let i = 0; i < 24; i++) {
+      const a = (i / 24) * Math.PI * 2;
+      this.particles.push({ x: this.W / 2, y: this.H / 2, vx: Math.cos(a) * 360, vy: Math.sin(a) * 360, life: 0.6, color: '#ffb03c', size: 5 });
+    }
+    this.updateSkipBtn();
+  }
+
+  // 伪最终 Boss「死神」登场（通关第 5 关后）：背景随出场显现，拥有闪现横劈 / 裂缝诅咒 / 黑洞三种攻击
+  spawnReaperBoss() {
+    const cfg = BOSS_REAPER;
+    this.boss = {
+      name: cfg.name,
+      hp: cfg.hp,
+      maxHp: cfg.hp,
+      x: this.W / 2,
+      y: 150,
+      r: 90,
+      phase: 0,
+      flash: 0,
+      attackCd: 1,
+    };
+    this.bossPhase = 'reaper';
+    this.reaperSlashCd = REAPER_SLASH_INTERVAL;
+    this.reaperSlashWarn = 0;
+    this.reaperRiftCd = REAPER_RIFT_INTERVAL;
+    this.reaperRiftCharge = 0;
+    this.reaperBlackholeCd = REAPER_BLACKHOLE_INTERVAL;
+    this.reaperBlackhole = null;
+    this.reaperBeams = [];
+    this.curseTimer = 0;
+    this.curseTick = 0;
+    this.stunTimer = 0;
+    this.bgReaperAlpha = 0; // 背景随死神出场逐渐显现
+    this.bossBanner = 2.6;
+    this.bossBannerText = 'BOSS · 死神';
+    // 第三幕：死神登场，导师揭示真相
+    this.showStory('reaper', [
+      { step: 3, text: '死神现身了……不，等等——它只是个幌子！' },
+      { step: 3, text: '我能感觉到，它背后还藏着更深的东西。撑住，孩子，别倒下！' },
+    ]);
+    this.bossHud.classList.remove('hidden');
+    this.bossHud.querySelector('[data-k="bossName"]').textContent = cfg.name;
+    this.updateBossHud();
+    this.saveCheckpoint();
+    this.addFloat(this.W / 2, this.H / 2 - 40, '伪最终 Boss · 死神登场！', '#ff4a4a');
+    for (let i = 0; i < 30; i++) {
+      const a = (i / 30) * Math.PI * 2;
+      this.particles.push({ x: this.W / 2, y: this.H / 2, vx: Math.cos(a) * 360, vy: Math.sin(a) * 360, life: 0.7, color: '#ff4a4a', size: 5 });
+    }
+    this.updateSkipBtn();
+  }
+
+  // 第 6 关「进化Boss」登场（击败死神后）：第一阶段 500 血，不移动不攻击，周期性召唤第 1 关量级的小怪
+  spawnEvolvedBoss() {
+    const cfg = BOSS_EVOLVED;
+    this.boss = {
+      name: cfg.name,
+      hp: cfg.hp1,
+      maxHp: cfg.hp1,
+      x: this.W / 2,
+      y: 160,
+      r: 70,
+      evoPhase: 1, // 1 = 第一阶段（500 血召唤关），2 = 第二阶段（300 血弹幕形态）
+      phase: 0,
+      flash: 0,
+      attackCd: 1.5,
+      summonTimer: EVOLVED_SUMMON_INTERVAL, // 第一阶段小怪召唤计时
+    };
+    this.bossPhase = 'evolved';
+    // 缓行领域初始状态（进入第二阶段时激活）
+    this.slowFieldActive = 0;
+    this.slowFieldElapsed = 0;
+    this.slowFieldBlockUsed = false;
+    this.stage = ELITE_BATTLE_STAGE; // 第 6 关：出怪量与第 2 关大抵相同
+    // 清理死神残留状态
+    this.bgReaperAlpha = 0;
+    this.reaperBlackhole = null;
+    this.reaperBeams = [];
+    this.curseTimer = 0;
+    this.stunTimer = 0;
+    this.bossBanner = 2.6;
+    this.bossBannerText = 'BOSS · 进化Boss';
+    // 第四幕：幕后黑手现身，导师点明两个形态
+    this.showStory('evolved', [
+      { step: 4, text: '就是它——吞噬了无数魔物之力的「进化Boss」，一切的黑手！' },
+      { step: 4, text: '它有两个形态：第一形态只会召唤小怪。打空它的护体魔血，真正的战斗才会开始！' },
+    ]);
+    this.bossHud.classList.remove('hidden');
+    this.bossHud.querySelector('[data-k="bossName"]').textContent = cfg.name;
+    this.updateBossHud();
+    this.saveCheckpoint();
+    this.addFloat(this.W / 2, this.H / 2 - 40, '第 6 关 · 进化Boss 登场！', '#ffb03c');
+    this.addFloat(this.W / 2, this.H / 2, `第一阶段：击破 ${cfg.hp1} 血！`, '#ffd24a');
+    for (let i = 0; i < 30; i++) {
+      const a = (i / 30) * Math.PI * 2;
+      this.particles.push({ x: this.W / 2, y: this.H / 2, vx: Math.cos(a) * 360, vy: Math.sin(a) * 360, life: 0.7, color: '#ffb03c', size: 5 });
+    }
+    this.updateSkipBtn();
+  }
+
+  // 第一阶段召唤的小怪：第 1 关量级（血量为基准值，不随关卡加厚）
+  spawnStage1Minion() {
+    const idx = Math.floor(Math.random() * MONSTER_TYPES.length);
+    const t = MONSTER_TYPES[idx];
+    const r = t.r;
+    const hp = Math.max(1, Math.round(t.hp)); // 第 1 关量级：血量不加成
+    this.monsters.push({
+      type: t,
+      x: r + Math.random() * (this.W - r * 2),
+      y: -r,
+      r,
+      hp,
+      maxHp: hp,
+      speed: t.speed * (0.85 + Math.random() * 0.3),
+      exp: t.exp,
+      dmg: t.dmg,
+      wobble: 20,
+      phase: Math.random() * Math.PI * 2,
+      flash: 0,
+    });
+    // 召唤特效
+    for (let i = 0; i < 6; i++) {
+      const a = Math.random() * Math.PI * 2;
+      this.particles.push({ x: this.boss.x, y: this.boss.y, vx: Math.cos(a) * 140, vy: Math.sin(a) * 140, life: 0.35, color: '#ffb03c', size: 4 });
+    }
+  }
+
+  // 进化Boss：第一阶段固定原位召唤小怪；第二阶段缓慢游走并周期性发射直线弹丸
+  updateEvolved(dt) {
+    const b = this.boss;
+    const p = this.player;
+    // —— 第一阶段：不移动、不攻击，每 1.5 秒召唤第 1 关量级的小怪 ——
+    if (b.evoPhase === 1) {
+      b.summonTimer -= dt;
+      if (b.summonTimer <= 0) {
+        b.summonTimer = EVOLVED_SUMMON_INTERVAL;
+        this.spawnStage1Minion();
+      }
+      return;
+    }
+    // —— 第二阶段：保留原复活后形态的全部设定 ——
+    // 远程攻击型游走：与主角保持中远距离（过近后撤、过远靠拢），始终不出现在主角身边
+    const dist = Math.hypot(p.x - b.x, p.y - b.y) || 1;
+    const towardX = (p.x - b.x) / dist;
+    const towardY = (p.y - b.y) / dist;
+    const spd = 90;
+    let mvx = 0;
+    let mvy = 0;
+    if (dist < EVOLVED_KEEP_DISTANCE_MIN) {
+      // 距离过近：反向拉开距离
+      mvx = -towardX;
+      mvy = -towardY;
+    } else if (dist > EVOLVED_KEEP_DISTANCE_MAX) {
+      // 距离过远：缓慢靠拢进入射程
+      mvx = towardX;
+      mvy = towardY;
+    }
+    b.x += mvx * spd * dt + Math.sin(b.phase * 1.1) * 30 * dt;
+    b.y += mvy * spd * dt + Math.cos(b.phase * 0.8) * 24 * dt;
+    b.x = Math.max(b.r, Math.min(this.W - b.r, b.x));
+    b.y = Math.max(b.r, Math.min(this.H * 0.55, b.y));
+    // 复活金身期间（独立计时 evolvedInvulnRemaining > 0）Boss 不受伤害且不攻击；其他时间周期性向主角发射直线弹丸：伤害 = 10 + 主角最大生命值 * 5%
+    if (this.evolvedInvulnRemaining > 0) {
+      this.evolvedInvulnRemaining = Math.max(0, this.evolvedInvulnRemaining - dt);
+    } else {
+      b.attackCd -= dt;
+      if (b.attackCd <= 0) {
+        b.attackCd = 2.0;
+        const ang = Math.atan2(p.y - b.y, p.x - b.x);
+        const dmg = Math.max(1, Math.round(EVOLVED_PROJECTILE_DMG_BASE + this.maxHp * EVOLVED_PROJECTILE_DMG_RATIO));
+        this.bossProjectiles.push({
+          x: b.x, y: b.y,
+          vx: Math.cos(ang) * ELITE_PROJECTILE_SPEED,
+          vy: Math.sin(ang) * ELITE_PROJECTILE_SPEED,
+          r: ELITE_PROJECTILE_R, dmg, life: 3,
+        });
+      }
+    }
+  }
+
+  // Boss「极限」登场（第 3 关结束后强制挑战；击败后进入第 4 关小怪关）
+  spawnExtremeBoss() {
+    const cfg = BOSS_EXTREME;
+    this.boss = {
+      name: cfg.name,
+      hp: cfg.hp,
+      maxHp: cfg.hp,
+      x: this.W / 2,
+      y: 130,
+      r: 78,
+      phase: 0,
+      flash: 0,
+      attackCd: 1,
+    };
+    this.bossPhase = 'extreme';
+    this.extremeShotCd = EXTREME_SHOT_INTERVAL;
+    this.killField = false;
+    this.meteorCd = METEOR_INTERVAL;
+    this.meteors = [];
+    this.bossBanner = 2.4;
+    this.bossBannerText = 'BOSS · 极限';
+    // 第二幕：极限登场前导师警告
+    this.showStory('extreme', [
+      { step: 2, text: '小心！前面那个大家伙叫「极限」——它曾是我们最强的守护造物。' },
+      { step: 2, text: '它已经疯了，别指望讲道理。侧身走位，看准弹幕空隙再反击！' },
+    ]);
+    this.bossHud.classList.remove('hidden');
+    this.bossHud.querySelector('[data-k="bossName"]').textContent = cfg.name;
+    this.updateBossHud();
+    this.saveCheckpoint();
+    this.addFloat(this.W / 2, this.H / 2 - 40, 'Boss · 极限 登场！', '#ff4a4a');
+    this.updateSkipBtn();
+  }
+
+  // 跳过当前关卡：按满经验值结算直接进入下一关（Boss 关不可跳过；创作者模式可跳过包括 Boss 关在内的所有关卡）
+  skipStage() {
+    if (this.state !== 'playing') return;
+    // 创作者模式：阶段性跳过，每次仅跳过当前一个关卡或单个 Boss 关（不再直达最终 Boss）
+    if (this.creatorModeOn) {
+      if (this.bossPhase === 'evolved') {
+        // 进化Boss：直接通关 -> 本局结束胜利
+        this.boss = null;
+        this.bossPhase = 'normal';
+        this.bossProjectiles = [];
+        this.bossHud.classList.add('hidden');
+        this.gameOver(true);
+        return;
+      }
+      if (this.bossPhase === 'reaper') {
+        // 死神：直接击败 -> 进入第 6 关进化Boss关卡
+        this.spawnEvolvedBoss();
+        return;
+      }
+      this.bossTriggered = true; // 创作者模式跳过 Boss 关时标记已触发，避免后续升级再次自动触发 Eternity
+      // 当前为小怪关：直接推进到下一关（跳过关卡，不触发升级、不增加等级/经验/攻击）
+      if (!this.boss) {
+        this.enterNextStage();
+        this.updateSkipBtn();
+        return;
+      }
+      // 当前为单个 Boss 关：直接击败该 Boss 进入下一关
+      if (this.bossPhase === 'boss') {
+        // Eternity：直接击败（不触发转化、不弹出被动卡牌），直接进入第 2 关小怪关
+        this.boss = null;
+        this.bossPhase = 'normal';
+        this.bossHud.classList.add('hidden');
+        this.passiveChosen = 'break'; // 创作者模式跳过 Eternity 关时自动选择被动，避免再次弹出三选一
+        this.enterNextStage();
+      } else if (this.bossPhase === 'extreme') {
+        // Boss「极限」：进入第 4 关小怪关
+        this.boss = null;
+        this.bossPhase = 'normal';
+        this.killField = false;
+        this.bossHud.classList.add('hidden');
+        this.stage = 4;
+        this.enterNextStage();
+      } else if (this.bossPhase === 'pseudo') {
+        // 伪·永恒：直接击败进入第 2 关小怪关（不弹出被动卡牌，被动已随 Eternity 跳过时选定）
+        this.boss = null;
+        this.bossPhase = 'normal';
+        this.bossHud.classList.add('hidden');
+        if (!this.passiveChosen) this.passiveChosen = 'break'; // 兜底：若未选过被动则自动选择
+        this.enterNextStage();
+      } else {
+        // 死神：直接通关 -> 本局结束胜利
+        this.boss = null;
+        this.bossPhase = 'normal';
+        this.bgReaperAlpha = 0;
+        this.reaperBlackhole = null;
+        this.reaperBeams = [];
+        this.curseTimer = 0;
+        this.stunTimer = 0;
+        this.bossHud.classList.add('hidden');
+        this.gameOver(true);
+        return;
+      }
+      this.updateSkipBtn();
+      return;
+    }
+    if (this.boss) return; // Boss 关不可跳过
+    // 直接推进到下一关（跳过关卡，不触发升级、不增加等级/经验/攻击）
+    this.enterNextStage();
+  }
+
+  updateSkipBtn() {
+    // Boss 关不可跳过；其余小怪关（含第 1 关）可跳过；创作者模式可跳过所有关卡（含 Boss 关）
+    const bossLocked = !!this.boss && !this.creatorModeOn;
+    const disabled = bossLocked || this.state !== 'playing';
+    this.skipBtn.classList.toggle('disabled', disabled);
+    if (this.creatorModeOn) {
+      this.skipBtn.textContent = '创作者 · 跳过本关';
+    } else if (this.boss) {
+      this.skipBtn.textContent = 'Boss 战';
+    } else {
+      this.skipBtn.textContent = `跳过 · 第${this.stage}关`;
+    }
+  }
+
+  updateBoss(dt) {
+    const b = this.boss;
+    b.phase += dt;
+    b.flash -= dt;
+
+    // Eternity：全屏能量波（预警 -> 命中）；伪·永恒蓄力光波
+    if (this.bossPhase === 'boss') {
+      // 左右缓慢摆动
+      const amp = 60;
+      b.x = this.W / 2 + Math.sin(b.phase * 0.8) * amp;
+      b.x = Math.max(b.r, Math.min(this.W - b.r, b.x));
+      const targetY = 120;
+      b.y += (targetY - b.y) * Math.min(1, dt * 1.5);
+      this.updateEternityWave(dt);
+    } else if (this.bossPhase === 'extreme') {
+      this.updateExtreme(dt);
+    } else if (this.bossPhase === 'reaper') {
+      this.updateReaper(dt);
+    } else if (this.bossPhase === 'evolved') {
+      this.updateEvolved(dt);
+      this.updateBossProjectiles(dt);
+    } else {
+      this.updatePseudo(dt);
+    }
+  }
+
+  // 进化Boss 弹丸：向主角方向直线飞行，命中扣血并销毁，飞出屏幕即移除
+  updateBossProjectiles(dt) {
+    const p = this.player;
+    for (let i = this.bossProjectiles.length - 1; i >= 0; i--) {
+      const pr = this.bossProjectiles[i];
+      pr.x += pr.vx * dt;
+      pr.y += pr.vy * dt;
+      pr.life -= dt;
+      // 飞出屏幕或超时移除
+      if (pr.life <= 0 || pr.x < -40 || pr.x > this.W + 40 || pr.y < -40 || pr.y > this.H + 40) {
+        this.bossProjectiles.splice(i, 1);
+        continue;
+      }
+      // 命中主角判定
+      if (Math.hypot(pr.x - p.x, pr.y - p.y) < pr.r + p.w / 2) {
+        this.bossProjectiles.splice(i, 1);
+        if (!this.isInvincible()) {
+          const newHp = this.hp - pr.dmg;
+          if (newHp <= 0 && this.bossPhase === 'evolved' && !this.slowFieldBlockUsed) {
+            // 缓行领域中若血量应清零则触发一次格挡，格挡当前伤害保留 1 点血量
+            this.slowFieldBlockUsed = true;
+            this.hp = 1;
+            this.shake = 8;
+            this.addFloat(p.x, p.y - 70, '格挡！', '#ffd24a');
+            this.addFloat(p.x, p.y - 50, `-${pr.dmg} HP`, '#ff5a5a');
+            for (let k = 0; k < 6; k++) {
+              const a = Math.random() * Math.PI * 2;
+              this.particles.push({ x: p.x, y: p.y, vx: Math.cos(a) * 160, vy: Math.sin(a) * 160, life: 0.3, color: '#ffd24a', size: 4 });
+            }
+          } else {
+            this.hp = newHp;
+            this.shake = 10;
+            this.addFloat(p.x, p.y - 50, `-${pr.dmg} HP`, '#ff5a5a');
+            for (let k = 0; k < 6; k++) {
+              const a = Math.random() * Math.PI * 2;
+              this.particles.push({ x: p.x, y: p.y, vx: Math.cos(a) * 160, vy: Math.sin(a) * 160, life: 0.3, color: '#ff9a5a', size: 4 });
+            }
+            if (this.hp <= 0) { this.hp = 0; this.gameOver(false); return; }
+          }
+        } else {
+          this.addFloat(p.x, p.y - 50, '免疫', '#ffd24a');
+        }
+      }
+    }
+  }
+
+  // 伪最终 Boss「死神」：缓慢游走 + 三种攻击（闪现横劈 / 裂缝诅咒 / 黑洞）
+  updateReaper(dt) {
+    const b = this.boss;
+    const p = this.player;
+    // 背景随出场逐渐显现
+    if (this.bgReaperAlpha < 1) this.bgReaperAlpha = Math.min(1, this.bgReaperAlpha + dt * 0.6);
+    // 缓慢向主角位置靠拢并带轻微游走，保持在上半区（定身预警期间不移动）
+    if (this.reaperSlashWarn <= 0) {
+      const dx = p.x - b.x;
+      const dy = (p.y - 200) - b.y;
+      const len = Math.hypot(dx, dy) || 1;
+      const spd = 120;
+      b.x += (dx / len) * spd * dt + Math.sin(b.phase * 1.1) * 30 * dt;
+      b.y += (dy / len) * spd * dt + Math.cos(b.phase * 0.8) * 24 * dt;
+      b.x = Math.max(b.r, Math.min(this.W - b.r, b.x));
+      b.y = Math.max(b.r, Math.min(this.H * 0.5, b.y));
+    }
+
+    // 攻击 1：闪现扇形斩击（普通攻击，高频）——先闪现到主角正前方，定身1秒预警，再释放扇形斩击
+    if (this.reaperSlashWarn > 0) {
+      // 定身预警阶段：Boss 保持不动，倒计时结束释放扇形斩击
+      this.reaperSlashWarn -= dt;
+      if (this.reaperSlashWarn <= 0) {
+        this.reaperSlashWarn = 0;
+        this.doReaperSlash();
+        this.reaperSlashCd = REAPER_SLASH_INTERVAL;
+      }
+    } else {
+      this.reaperSlashCd -= dt;
+      if (this.reaperSlashCd <= 0 && this.reaperRiftCharge <= 0) {
+        // 立即闪现到主角正前方，然后进入定身预警
+        const b2 = this.boss;
+        const tx = p.x;
+        const ty = Math.max(b2.r, p.y - 140);
+        for (let i = 0; i < 14; i++) {
+          const a = (i / 14) * Math.PI * 2;
+          this.particles.push({ x: b2.x, y: b2.y, vx: Math.cos(a) * 200, vy: Math.sin(a) * 200, life: 0.35, color: '#ff9ae6', size: 4 });
+        }
+        b2.x = Math.max(b2.r, Math.min(this.W - b2.r, tx));
+        b2.y = ty;
+        this.reaperSlashWarn = REAPER_SLASH_WARN; // 定身 1 秒
+        this.addFloat(p.x, p.y - 80, '⚠ 死神定身 · 扇形斩击！', '#ff9ae6');
+      }
+    }
+
+    // 攻击 2：裂缝诅咒（特殊攻击，触发概率远低于普通攻击）——蓄力 3s 后正前与左右斜方劈出裂缝
+    if (this.reaperRiftCharge > 0) {
+      this.reaperRiftCharge -= dt;
+      if (this.reaperRiftCharge <= 0) {
+        this.reaperRiftCharge = 0;
+        this.fireReaperRift();
+        this.reaperRiftCd = REAPER_RIFT_INTERVAL;
+      }
+    } else {
+      this.reaperRiftCd -= dt;
+      if (this.reaperRiftCd <= 0) {
+        this.reaperRiftCd = REAPER_RIFT_INTERVAL;
+        // 特殊攻击触发概率远低于普通攻击
+        if (Math.random() < REAPER_RIFT_PROB) {
+          this.reaperRiftCharge = REAPER_RIFT_CHARGE;
+          this.addFloat(this.W / 2, this.H / 2 - 60, '⚠ 死神蓄力 · 裂缝来袭！', '#b58cff');
+        }
+      }
+    }
+
+    // 攻击 3：黑洞（中频）——吸入则定身 2s，未吸入则射出八道光线
+    this.reaperBlackholeCd -= dt;
+    if (this.reaperBlackholeCd <= 0 && !this.reaperBlackhole) {
+      this.reaperBlackholeCd = REAPER_BLACKHOLE_INTERVAL;
+      this.spawnReaperBlackhole();
+    }
+    this.updateReaperBlackhole(dt);
+    this.updateReaperBeams(dt);
+  }
+
+  // 死神扇形斩击：定身预警结束后向前方释放扇形范围斩击，命中扇形内的主角造成最大生命值 10%
+  doReaperSlash() {
+    const b = this.boss;
+    const p = this.player;
+    // 扇形判定：以 Boss 为圆心，正下方为中心方向，半角 ±REAPER_SLASH_HALF_ANGLE，半径 REAPER_SLASH_RANGE
+    const dx = p.x - b.x;
+    const dy = p.y - b.y;
+    const dist = Math.hypot(dx, dy);
+    const maxR = REAPER_SLASH_RANGE + p.w / 2;
+    if (dist <= maxR) {
+      // 中心方向为正下方 (Math.PI/2)
+      const angleToPlayer = Math.atan2(dy, dx);
+      const centerAngle = Math.PI / 2;
+      let diff = angleToPlayer - centerAngle;
+      // 归一化到 [-PI, PI]
+      while (diff > Math.PI) diff -= Math.PI * 2;
+      while (diff < -Math.PI) diff += Math.PI * 2;
+      if (Math.abs(diff) <= REAPER_SLASH_HALF_ANGLE) {
+        const dmg = Math.max(1, Math.round(this.maxHp * REAPER_SLASH_DMG_RATIO));
+        if (!this.isInvincible()) {
+          this.hp -= dmg;
+          this.shake = 16;
+          this.addFloat(p.x, p.y - 50, `-${dmg} HP`, '#ff5a5a');
+          if (this.hp <= 0) { this.hp = 0; this.gameOver(false); return; }
+        } else {
+          this.addFloat(p.x, p.y - 50, '免疫', '#ffd24a');
+        }
+      }
+    }
+    // 扇形视觉：多道弧光粒子模拟扇形斩击
+    for (let i = 0; i < 8; i++) {
+      const a = Math.PI / 2 + (i / 7 - 0.5) * REAPER_SLASH_HALF_ANGLE * 2;
+      this.particles.push({
+        x: b.x + Math.cos(a) * 30,
+        y: b.y + Math.sin(a) * 30,
+        vx: Math.cos(a) * 300,
+        vy: Math.sin(a) * 300,
+        life: 0.3, color: '#fff', size: 8, slash: true,
+      });
+    }
+  }
+
+  // 死神裂缝：蓄力结束后向正前方与左右斜方劈出三道裂缝，瞬间命中扣 10 血并附加诅咒
+  fireReaperRift() {
+    const b = this.boss;
+    const p = this.player;
+    // 三个方向：正前方(向下)、左斜、右斜
+    const dirs = [Math.PI / 2, Math.PI / 2 - 0.6, Math.PI / 2 + 0.6];
+    for (const ang of dirs) {
+      this.reaperBeams.push({
+        x: b.x, y: b.y,
+        vx: Math.cos(ang) * 520,
+        vy: Math.sin(ang) * 520,
+        r: 18, dmg: REAPER_RIFT_DMG, life: 1.2, fromBoss: true,
+        rift: true, curse: true,
+      });
+    }
+    // 裂缝爆发粒子
+    for (let i = 0; i < 20; i++) {
+      const a = (i / 20) * Math.PI * 2;
+      this.particles.push({ x: b.x, y: b.y, vx: Math.cos(a) * 260, vy: Math.sin(a) * 260, life: 0.45, color: '#b58cff', size: 5 });
+    }
+    void p;
+  }
+
+  // 死神黑洞：在主角上方出现并向远离主角方向缓慢漂移（不强行吸入），可移动躲避；
+  // 若仍被击中则短暂定身并立即弹出结束，否则到期射出八道光线
+  spawnReaperBlackhole() {
+    const p = this.player;
+    const bx = p.x + (Math.random() - 0.5) * 160;
+    const by = p.y - 220;
+    this.reaperBlackhole = { x: bx, y: by, life: REAPER_BLACKHOLE_LIFE, pulled: false };
+    this.addFloat(bx, by - REAPER_BLACKHOLE_RADIUS - 10, '⚠ 黑洞来袭 · 快躲开！', '#7a4aff');
+  }
+
+  updateReaperBlackhole(dt) {
+    const bh = this.reaperBlackhole;
+    if (!bh) return;
+    bh.life -= dt;
+    const p = this.player;
+    // 漂移：黑洞向远离主角的方向缓慢移动，给玩家留出躲避空间（不再把主角强行吸过去）
+    const dx = p.x - bh.x;
+    const dy = p.y - bh.y;
+    const dist = Math.hypot(dx, dy) || 1;
+    bh.x += (dx / dist) * REAPER_BLACKHOLE_DRIFT * dt;
+    bh.y += (dy / dist) * REAPER_BLACKHOLE_DRIFT * dt;
+    // 命中判定：主角进入黑洞半径内 -> 短暂定身并立即弹出结束
+    if (!bh.pulled && dist < REAPER_BLACKHOLE_RADIUS + p.w / 2) {
+      bh.pulled = true;
+      this.stunTimer = REAPER_BLACKHOLE_STUN;
+      this.addFloat(p.x, p.y - 60, '被击中 · 短暂定身！', '#7a4aff');
+      for (let i = 0; i < 16; i++) {
+        const a = (i / 16) * Math.PI * 2;
+        this.particles.push({ x: bh.x, y: bh.y, vx: Math.cos(a) * 200, vy: Math.sin(a) * 200, life: 0.4, color: '#7a4aff', size: 4 });
+      }
+      this.reaperBlackhole = null;
+      return;
+    }
+    // 存活结束且未吸入 -> 射出八道光线
+    if (bh.life <= 0) {
+      for (let i = 0; i < 8; i++) {
+        const ang = (i / 8) * Math.PI * 2;
+        this.reaperBeams.push({
+          x: bh.x, y: bh.y,
+          vx: Math.cos(ang) * 380,
+          vy: Math.sin(ang) * 380,
+          r: 12,
+          dmg: Math.max(1, Math.round(this.maxHp * REAPER_BLACKHOLE_BEAM_DMG_RATIO)),
+          life: 1.6, fromBoss: true, beam: true,
+        });
+      }
+      this.addFloat(bh.x, bh.y, '光线爆发！', '#9a6aff');
+      this.reaperBlackhole = null;
+    }
+  }
+
+  updateReaperBeams(dt) {
+    const p = this.player;
+    for (let i = this.reaperBeams.length - 1; i >= 0; i--) {
+      const bm = this.reaperBeams[i];
+      bm.x += bm.vx * dt;
+      bm.y += bm.vy * dt;
+      bm.life -= dt;
+      const dx = bm.x - p.x;
+      const dy = bm.y - p.y;
+      const hitR = bm.r + p.w / 2;
+      if (dx * dx + dy * dy < hitR * hitR) {
+        if (!this.isInvincible()) {
+          this.hp -= bm.dmg;
+          this.shake = 10;
+          this.addFloat(p.x, p.y - 50, `-${bm.dmg} HP`, '#ff5a5a');
+          // 裂缝命中附加诅咒：每秒扣 5% 最大生命值，持续 2s
+          if (bm.curse) {
+            this.curseTimer = REAPER_CURSE_DURATION;
+            this.curseTick = 1; // 立即开始每 1s 扣血
+            this.addFloat(p.x, p.y - 70, '受诅咒！', '#b58cff');
+          }
+          if (this.hp <= 0) { this.hp = 0; this.gameOver(false); return; }
+        } else {
+          this.addFloat(p.x, p.y - 50, '免疫', '#ffd24a');
+        }
+        this.reaperBeams.splice(i, 1);
+        continue;
+      }
+      if (bm.life <= 0 || bm.x < -40 || bm.x > this.W + 40 || bm.y < -40 || bm.y > this.H + 40) {
+        this.reaperBeams.splice(i, 1);
+      }
+    }
+  }
+
+  // 诅咒结算：每秒扣主角最大生命值 5%，持续 2s
+  updateCurse(dt) {
+    if (this.curseTimer <= 0) return;
+    this.curseTimer = Math.max(0, this.curseTimer - dt);
+    this.curseTick -= dt;
+    if (this.curseTick <= 0) {
+      this.curseTick = 1;
+      if (this.curseTimer > 0) {
+        const dmg = Math.max(1, Math.round(this.maxHp * REAPER_CURSE_DPS_RATIO));
+        if (!this.isInvincible()) {
+          this.hp -= dmg;
+          this.addFloat(this.player.x, this.player.y - 60, `诅咒 -${dmg}`, '#b58cff');
+          if (this.hp <= 0) { this.hp = 0; this.gameOver(false); return; }
+        }
+      }
+    }
+  }
+
+  // 最终 Boss「极限」：灵活上下左右移动，朝主角方向扔陨石（预先标出落点位置与范围）；半血启动杀戮领域（期间伤害翻倍）
+  updateExtreme(dt) {
+    const b = this.boss;
+    // 灵活上下左右移动：缓慢向主角位置靠拢并带轻微游走，保持在上半区
+    const p = this.player;
+    const dx = p.x - b.x;
+    const dy = (p.y - 160) - b.y; // 目标 y 略高于主角，避免贴脸
+    const len = Math.hypot(dx, dy) || 1;
+    b.x += (dx / len) * EXTREME_MOVE_SPEED * dt + Math.sin(b.phase * 1.2) * 40 * dt;
+    b.y += (dy / len) * EXTREME_MOVE_SPEED * dt + Math.cos(b.phase * 0.9) * 30 * dt;
+    b.x = Math.max(b.r, Math.min(this.W - b.r, b.x));
+    b.y = Math.max(b.r, Math.min(this.H * 0.55, b.y));
+    // 半血时启动杀戮领域（一次性触发）：期间 Boss 伤害翻倍
+    if (!this.killField && b.hp <= b.maxHp * 0.5) {
+      this.killField = true;
+      this.addFloat(this.W / 2, this.H / 2 - 60, '⚠ 杀戮领域 · 技能封印 · 伤害翻倍！', '#ff4a4a');
+      for (let i = 0; i < 30; i++) {
+        const a = (i / 30) * Math.PI * 2;
+        this.particles.push({ x: b.x, y: b.y, vx: Math.cos(a) * 320, vy: Math.sin(a) * 320, life: 0.6, color: '#ff4a4a', size: 5 });
+      }
+    }
+    // 持续朝主角方向扔陨石（预先标出落点位置与范围）
+    this.meteorCd -= dt;
+    if (this.meteorCd <= 0) {
+      this.meteorCd = METEOR_INTERVAL;
+      this.throwMeteor();
+    }
+    this.updateMeteors(dt);
+  }
+
+  // 「极限」朝主角所在方向扔一颗陨石：先预标落点位置与范围，预警结束后砸下造成伤害
+  throwMeteor() {
+    const p = this.player;
+    const tx = p.x + (Math.random() - 0.5) * 40;
+    const ty = p.y + (Math.random() - 0.5) * 40;
+    this.meteors.push({ x: tx, y: ty, r: METEOR_RADIUS, warn: METEOR_WARNING });
+    this.addFloat(tx, ty - METEOR_RADIUS - 10, '⚠ 陨石来袭！', '#ff8a3c');
+  }
+
+  // 陨石落点预警计时：预警结束 -> 在标出的位置与范围内砸下结算伤害
+  updateMeteors(dt) {
+    const p = this.player;
+    for (let i = this.meteors.length - 1; i >= 0; i--) {
+      const m = this.meteors[i];
+      m.warn -= dt;
+      if (m.warn <= 0) {
+        // 砸下：落点范围内命中玩家造成 8 点伤害（杀戮领域开启时翻倍为 16）
+        const dmg = this.killField ? METEOR_DMG * 2 : METEOR_DMG;
+        const dx = m.x - p.x;
+        const dy = m.y - p.y;
+        if (dx * dx + dy * dy < (m.r + p.w / 2) * (m.r + p.w / 2)) {
+          if (!this.isInvincible()) {
+            this.hp -= dmg;
+            this.shake = 18;
+            this.addFloat(p.x, p.y - 50, `-${dmg} HP`, '#ff5a5a');
+            if (this.hp <= 0) {
+              this.hp = 0;
+              this.gameOver(false);
+              return;
+            }
+          } else {
+            this.addFloat(p.x, p.y - 50, '免疫', '#ffd24a');
+          }
+        }
+        // 落地爆裂粒子（覆盖整个落点范围）
+        for (let k = 0; k < 22; k++) {
+          const a = (k / 22) * Math.PI * 2;
+          const rr = Math.random() * m.r;
+          this.particles.push({
+            x: m.x + Math.cos(a) * rr, y: m.y + Math.sin(a) * rr,
+            vx: Math.cos(a) * 160, vy: Math.sin(a) * 160 - 60,
+            life: 0.5, color: '#ff8a3c', size: 4,
+          });
+        }
+        this.meteors.splice(i, 1);
+      }
+    }
+  }
+
+  // 「极限」朝主角方向扔出陨石（预先标出落点位置与范围，砸到一下 8 点伤害；杀戮领域开启时翻倍为 16）
+  // （原炮弹逻辑已由陨石取代，保留函数名以兼容旧调用）
+  fireExtremeShot() {
+    this.throwMeteor();
+  }
+
+  // 伪·永恒：非蓄力时四处移动，攻击前静止蓄力 2 秒，随后发射光波，间隔 5 秒
+  updatePseudo(dt) {
+    const b = this.boss;
+    if (this.pseudoCharge > 0) {
+      // 蓄力期间保持不动
+      this.pseudoCharge -= dt;
+      if (this.pseudoCharge <= 0) {
+        this.pseudoCharge = 0;
+        this.firePseudoBeam();
+        this.pseudoCd = PSEUDO_INTERVAL; // 从发射时刻起计时下一次攻击
+      }
+    } else {
+      // 四处移动（左右摆动 + 上下浮动，比 Eternity 更快更贴近）
+      const amp = 90;
+      b.x = this.W / 2 + Math.sin(b.phase * 0.9) * amp;
+      b.x = Math.max(b.r, Math.min(this.W - b.r, b.x));
+      const targetY = 150 + Math.sin(b.phase * 1.4) * 30;
+      b.y += (targetY - b.y) * Math.min(1, dt * 1.8);
+      // 攻击倒计时
+      this.pseudoCd -= dt;
+      if (this.pseudoCd <= 0) {
+        this.pseudoCd = PSEUDO_INTERVAL;
+        this.pseudoCharge = PSEUDO_CHARGE; // 进入蓄力
+        this.addFloat(this.W / 2, this.H / 2 - 60, '⚠ 光波蓄力！', '#7ee6ff');
+      }
+    }
+  }
+
+  // 伪·永恒向下发射一道光波（命中造成伤害）
+  firePseudoBeam() {
+    const b = this.boss;
+    const sp = 380;
+    this.bullets.push({
+      x: b.x, y: b.y + b.r * 0.5,
+      vx: 0,
+      vy: sp,
+      r: 16,
+      dmg: PSEUDO_BEAM_DMG,
+      life: 4,
+      fromBoss: true,
+      beam: true,
+      down: true,
+    });
+    // 发射瞬间的爆发粒子
+    for (let i = 0; i < 14; i++) {
+      const a = (i / 14) * Math.PI * 2;
+      this.particles.push({
+        x: b.x, y: b.y,
+        vx: Math.cos(a) * 220, vy: Math.sin(a) * 220,
+        life: 0.4, color: '#7ee6ff', size: 4,
+      });
+    }
+  }
+
+  // Eternity 全屏能量波：先蓄力预警，再对全屏玩家造成固定伤害
+  updateEternityWave(dt) {
+    if (this.waveWarning > 0) {
+      // 预警阶段结束 -> 释放能量波并结算伤害
+      this.waveWarning -= dt;
+      if (this.waveWarning <= 0) {
+        this.waveWarning = 0;
+        if (!this.waveHit) {
+          this.waveHit = true;
+          if (this.isInvincible()) {
+            this.addFloat(this.player.x, this.player.y - 50, '免疫', '#ffd24a');
+            this.waveTimer = WAVE_INTERVAL;
+            return;
+          }
+          this.hp -= WAVE_DAMAGE;
+          this.shake = 16;
+          this.addFloat(this.player.x, this.player.y - 50, `-${WAVE_DAMAGE} HP`, '#ff5a5a');
+          // 冲击波粒子
+          for (let i = 0; i < 24; i++) {
+            const a = (i / 24) * Math.PI * 2;
+            this.particles.push({
+              x: this.W / 2, y: this.H / 2,
+              vx: Math.cos(a) * 420, vy: Math.sin(a) * 420,
+              life: 0.5, color: '#ff5ad0', size: 5,
+            });
+          }
+          if (this.hp <= 0) {
+            // 被 Eternity 能量波打死 -> 立即满血重生，Boss 转化为伪·永恒
+            this.hp = this.maxHp;
+            this.addFloat(this.player.x, this.player.y - 70, '重生！', '#6ee7ff');
+            for (let i = 0; i < 16; i++) {
+              const a = (i / 16) * Math.PI * 2;
+              this.particles.push({
+                x: this.player.x, y: this.player.y,
+                vx: Math.cos(a) * 180, vy: Math.sin(a) * 180,
+                life: 0.5, color: '#6ee7ff', size: 4,
+              });
+            }
+            this.transformToPseudo();
+          }
+        }
+        this.waveTimer = WAVE_INTERVAL;
+      }
+    } else {
+      // 蓄力倒计时
+      this.waveTimer -= dt;
+      if (this.waveTimer <= 0) {
+        this.waveTimer = WAVE_INTERVAL;
+        this.waveWarning = WAVE_WARNING;
+        this.waveHit = false;
+        this.addFloat(this.W / 2, this.H / 2 - 60, '⚠ 全屏能量波！', '#ff9ae6');
+      }
+    }
+  }
+
+  bossFire() {
+    const b = this.boss;
+    const p = this.player;
+    const dx = p.x - b.x;
+    const dy = p.y - b.y;
+    const len = Math.hypot(dx, dy) || 1;
+    const sp = 300;
+    this.bullets.push({
+      x: b.x, y: b.y + b.r * 0.5,
+      vx: (dx / len) * sp,
+      vy: (dy / len) * sp,
+      r: 12,
+      dmg: 2,
+      life: 4,
+      fromBoss: true,
+    });
+  }
+
+  updateBossHud() {
+    const fill = this.bossHud.querySelector('.boss-fill');
+    if (fill && this.boss) fill.style.width = `${Math.max(0, (this.boss.hp / this.boss.maxHp) * 100)}%`;
+  }
+
+  // 第 2、3 关击杀进度 HUD：显示本关 x/500
+  updateStageProgressHud() {
+    const goal = STAGE_KILL_GOAL[this.stage];
+    if (!goal || this.boss || this.state !== 'playing') {
+      this.stageProgress.classList.add('hidden');
+      return;
+    }
+    this.stageProgress.classList.remove('hidden');
+    this.stageProgress.querySelector('[data-k="stageNum"]').textContent = String(this.stage);
+    this.stageProgress.querySelector('[data-k="stageKills"]').textContent = String(Math.min(this.stageKills, goal));
+    this.stageProgress.querySelector('[data-k="stageGoal"]').textContent = String(goal);
+  }
+
+  // ---------- 魔法导师剧情（半互动式：点击推进，关键节点可选祝福） ----------
+  showStory(key, steps, onDone) {
+    if (this.storySceneDone[key]) { if (onDone) onDone(); return; } // 同一场景只播一次
+    this.storySceneDone[key] = true;
+    this.storyQueue = steps.slice();
+    this.storyOnDone = onDone || null;
+    this.storyPending = true;
+    this.renderStoryStep();
+    this.storyScreen.classList.remove('hidden');
+  }
+
+  renderStoryStep() {
+    const s = this.storyQueue[0];
+    if (!s) return;
+    this.storyStepEl.textContent = s.step ? `第 ${s.step} 幕` : '剧情';
+    this.storyTextEl.textContent = s.text;
+    const hasChoices = !!s.choices;
+    this.storyChoicesEl.classList.toggle('hidden', !hasChoices);
+    this.storyHintEl.style.visibility = hasChoices ? 'hidden' : 'visible';
+  }
+
+  advanceStory() {
+    if (!this.storyPending) return;
+    const s = this.storyQueue[0];
+    if (s && s.choices) return; // 出现选项时必须点击选项，点击空白不推进
+    this.storyQueue.shift();
+    if (this.storyQueue.length === 0) this.endStory();
+    else this.renderStoryStep();
+  }
+
+  chooseBlessing(key) {
+    if (!this.storyPending) return;
+    const s = this.storyQueue[0];
+    if (!s || !s.choices) return;
+    this.blessingChosen = key;
+    if (key === 'power') {
+      this.damage += 2; // 力量祝福：攻击力永久 +2
+    } else {
+      this.maxHp += 2; // 生命祝福：生命上限永久 +2 并回满
+      this.hp = this.maxHp;
+    }
+    this.updateHud();
+    this.addFloat(this.W / 2, this.H / 2 - 60, key === 'power' ? '获得 力量祝福！' : '获得 生命祝福！', '#ffd87a');
+    this.storyQueue.shift();
+    if (this.storyQueue.length === 0) this.endStory();
+    else this.renderStoryStep();
+  }
+
+  endStory() {
+    this.storyPending = false;
+    this.storyQueue = [];
+    this.storyScreen.classList.add('hidden');
+    const cb = this.storyOnDone;
+    this.storyOnDone = null;
+    if (cb) cb();
+    if (this.state === 'playing') {
+      this.lastT = performance.now();
+      cancelAnimationFrame(this.raf);
+      this.raf = requestAnimationFrame(this.loop);
+    }
+  }
+
+  showPassiveSelect() {
+    this.passivePending = true;
+    this.passiveScreen.classList.remove('hidden');
+  }
+
+  selectPassive(key) {
+    if (!this.passivePending) return;
+    this.passiveChosen = key;
+    this.passivePending = false;
+    this.passiveScreen.classList.add('hidden');
+    // 选择后进入第 2 关（保留玩家成长与分数）
+    this.enterNextStage();
+    this.lastT = performance.now();
+    cancelAnimationFrame(this.raf);
+    this.raf = requestAnimationFrame(this.loop);
+  }
+
+  // ---------- 副武器三选一 ----------
+  showWeaponSelect() {
+    this.weaponPending = true;
+    this.weaponScreen.classList.remove('hidden');
+  }
+
+  selectWeapon(key) {
+    if (!this.weaponPending) return;
+    this.weaponChosen = key;
+    this.weaponPending = false;
+    this.weaponScreen.classList.add('hidden');
+    this.weaponPanel.classList.remove('hidden');
+    this.updateWeaponPanel();
+    const w = SECONDARY_WEAPONS[key];
+    this.addFloat(this.W / 2, this.H / 2 - 40, `获得副武器 · ${w.name}`, '#ffd24a');
+    for (let i = 0; i < 20; i++) {
+      const a = (i / 20) * Math.PI * 2;
+      this.particles.push({ x: this.W / 2, y: this.H / 2, vx: Math.cos(a) * 300, vy: Math.sin(a) * 300, life: 0.5, color: w.color, size: 5 });
+    }
+    this.lastT = performance.now();
+    cancelAnimationFrame(this.raf);
+    this.raf = requestAnimationFrame(this.loop);
+  }
+
+  updateWeaponPanel() {
+    if (!this.weaponPanel) return;
+    const set = (k, v) => {
+      const el = this.weaponPanel.querySelector(`[data-k="${k}"]`);
+      if (el) el.textContent = v;
+    };
+    set('mainDmg', String(this.damage));
+    set('mainRate', `${(1 / this.fireInterval).toFixed(1)}/s`);
+    if (this.weaponChosen) {
+      const w = SECONDARY_WEAPONS[this.weaponChosen];
+      const dmg = Math.max(1, Math.round(this.damage * SECONDARY_DMG_RATIO));
+      set('wName', `${w.name}`);
+      set('wDmg', String(dmg));
+      set('wRate', `${(1 / w.interval).toFixed(1)}/s`);
+    } else {
+      set('wName', '未选择');
+      set('wDmg', '—');
+      set('wRate', '—');
+    }
+  }
+
+  fireSecondaryBullet() {
+    if (!this.weaponChosen) return;
+    const p = this.player;
+    const w = SECONDARY_WEAPONS[this.weaponChosen];
+    const dmg = Math.max(1, Math.round(this.damage * SECONDARY_DMG_RATIO));
+    const slow = this.slowFieldActive > 0 ? this.slowFactor : 1;
+    this.bullets.push({
+      x: p.x + p.w * 0.28,
+      y: p.y - p.h / 2,
+      vy: w.speed * slow,
+      r: w.r,
+      dmg,
+      life: 2,
+      secondary: true,
+      color: w.color,
+    });
+  }
+
+  // ---------- 被动卡牌效果更新 ----------
+  updatePassives(dt) {
+    const p = this.player;
+    // 破釜沉舟：血量低于 10% 且屏幕小怪 ≥10 时直接清屏，每关限一次
+    if (this.passiveChosen === 'break' && !this.breakUsedThisStage && !this.boss) {
+      if (this.hp > 0 && this.hp / this.maxHp < 0.1 && this.monsters.length >= 10) {
+        this.breakUsedThisStage = true;
+        for (let i = this.monsters.length - 1; i >= 0; i--) {
+          const m = this.monsters[i];
+          this.kills += 1;
+          this.score += m.exp * 10;
+          this.gainExp(m.exp);
+          for (let k = 0; k < 8; k++) {
+            const a = Math.random() * Math.PI * 2;
+            const sp = 80 + Math.random() * 200;
+            this.particles.push({ x: m.x, y: m.y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life: 0.4, color: '#ff8a3c', size: 4 });
+          }
+        }
+        this.monsters = [];
+        this.shake = 14;
+        this.addFloat(p.x, p.y - 70, '破釜沉舟 · 清屏！', '#ff5a3c');
+      }
+    }
+    // 控制领域：血量低于 50% 时自动开启，屏幕内小怪移速降低 20%，持续 20s
+    if (this.passiveChosen === 'control' && !this.boss) {
+      if (this.controlActive <= 0 && this.hp > 0 && this.hp / this.maxHp < 0.5) {
+        this.controlActive = 20;
+        this.addFloat(p.x, p.y - 70, '控制领域开启！小怪减速 20%', '#7ee6ff');
+      }
+      if (this.controlActive > 0) {
+        this.speedMul *= 0.8;
+        this.controlActive = Math.max(0, this.controlActive - dt);
+      }
+    }
+    // 弹簧陷阱：屏幕内有 20 只怪时自动在底端生成弹簧，怪兽碰到反弹到顶端，持续 15s
+    if (this.passiveChosen === 'spring' && !this.boss) {
+      if (this.springActive <= 0 && this.monsters.length >= 20) {
+        this.springActive = 15;
+        this.addFloat(p.x, p.y - 70, '弹簧陷阱生成！', '#ffd24a');
+      }
+      // 弹簧激活期间：怪兽碰到底端弹簧 -> 反弹到最顶端（在怪物移动/触底结算前执行）
+      if (this.springActive > 0) {
+        this.springActive = Math.max(0, this.springActive - dt);
+        for (const m of this.monsters) {
+          if (m.y + m.r >= this.H - 60) {
+            m.y = -m.r;
+            for (let k = 0; k < 6; k++) {
+              const a = Math.random() * Math.PI * 2;
+              const sp = 60 + Math.random() * 140;
+              this.particles.push({ x: m.x, y: this.H - 50, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - 80, life: 0.35, color: '#ffd24a', size: 3 });
+            }
+          }
+        }
+      }
+    }
+  }
+
+  // ---------- 技能体系 ----------
+  useSkill(key) {
+    if (this.state !== 'playing') return;
+    // 杀戮领域（最终 Boss 半血启动）期间主角不可使用任何技能
+    if (this.killField) {
+      this.addFloat(this.player.x, this.player.y - 60, '技能被封印！', '#ff4a4a');
+      this.updateSkillBar();
+      return;
+    }
+    if (key === 'defense' && this.skillDefenseCd <= 0) {
+      this.skillDefenseActive = SKILL_DEFENSE_DURATION;
+      this.skillDefenseCd = SKILL_DEFENSE_CD;
+      this.addFloat(this.player.x, this.player.y - 60, '绝对防御 · 金身！', '#ffd24a');
+      for (let i = 0; i < 20; i++) {
+        const a = (i / 20) * Math.PI * 2;
+        this.particles.push({ x: this.player.x, y: this.player.y, vx: Math.cos(a) * 200, vy: Math.sin(a) * 200, life: 0.5, color: '#ffe27a', size: 4 });
+      }
+    } else if (key === 'charge' && this.skillChargeCd <= 0) {
+      this.skillChargeActive = SKILL_CHARGE_DURATION;
+      this.skillChargeCd = SKILL_CHARGE_CD;
+      this.addFloat(this.player.x, this.player.y - 60, '充能攻击 · 伤害+150%！', '#ff9a3c');
+      for (let i = 0; i < 18; i++) {
+        const a = Math.random() * Math.PI * 2;
+        this.particles.push({ x: this.player.x, y: this.player.y, vx: Math.cos(a) * 160, vy: Math.sin(a) * 160, life: 0.45, color: '#ffb03c', size: 4 });
+      }
+    } else if (key === 'ult' && this.skillUltCd <= 0) {
+      this.skillUltActive = SKILL_ULT_DURATION;
+      this.skillUltCd = SKILL_ULT_CD;
+      this.ultFireTimer = 0;
+      this.addFloat(this.player.x, this.player.y - 60, '大招 · 双列弹幕！', '#6ee7ff');
+      for (let i = 0; i < 24; i++) {
+        const a = (i / 24) * Math.PI * 2;
+        this.particles.push({ x: this.player.x, y: this.player.y, vx: Math.cos(a) * 240, vy: Math.sin(a) * 240, life: 0.5, color: '#6ee7ff', size: 5 });
+      }
+    }
+    this.updateSkillBar();
+  }
+
+  updateSkillBar() {
+    const items = [
+      { btn: this.skillBtns.defense, cd: this.skillDefenseCd, active: this.skillDefenseActive },
+      { btn: this.skillBtns.charge, cd: this.skillChargeCd, active: this.skillChargeActive },
+      { btn: this.skillBtns.ult, cd: this.skillUltCd, active: this.skillUltActive },
+    ];
+    for (const it of items) {
+      if (!it.btn) continue;
+      const cdEl = it.btn.querySelector('.skill-cd');
+      it.btn.classList.toggle('active', it.active > 0);
+      it.btn.classList.toggle('cooling', it.cd > 0);
+      if (it.cd > 0) {
+        cdEl.textContent = Math.ceil(it.cd);
+        cdEl.style.display = 'flex';
+      } else {
+        cdEl.style.display = 'none';
+      }
+    }
+  }
+
+  // 技能激活时长与冷却逐帧衰减
+  updateSkills(dt) {
+    let changed = false;
+    if (this.skillDefenseActive > 0) { this.skillDefenseActive = Math.max(0, this.skillDefenseActive - dt); changed = true; }
+    if (this.skillDefenseCd > 0) { this.skillDefenseCd = Math.max(0, this.skillDefenseCd - dt); changed = true; }
+    if (this.skillChargeActive > 0) { this.skillChargeActive = Math.max(0, this.skillChargeActive - dt); changed = true; }
+    if (this.skillChargeCd > 0) { this.skillChargeCd = Math.max(0, this.skillChargeCd - dt); changed = true; }
+    if (this.skillUltActive > 0) { this.skillUltActive = Math.max(0, this.skillUltActive - dt); changed = true; }
+    if (this.skillUltCd > 0) { this.skillUltCd = Math.max(0, this.skillUltCd - dt); changed = true; }
+    if (changed) this.updateSkillBar();
+  }
+
+  // 金身期间不受任何伤害
+  isInvincible() { return this.skillDefenseActive > 0; }
+
+  // 缓行领域：主角移动和射击速度逐渐变慢，持续 10s；若血量应清零则触发一次格挡保留 1 HP
+  updateSlowField(dt) {
+    if (this.slowFieldActive <= 0) return;
+    this.slowFieldActive = Math.max(0, this.slowFieldActive - dt);
+    this.slowFieldElapsed += dt;
+    // 随时间逐渐变慢：从 1.0 衰减到 0.45
+    const t = Math.min(1, this.slowFieldElapsed / EVOLVED_SLOW_DURATION);
+    this.slowFactor = 1 - t * 0.55;
+  }
+
+  // ---------- 更新 ----------
+  update(dt) {
+    this.time += dt;
+    const p = this.player;
+    this.updateSkills(dt);
+    // 诅咒结算（死神裂缝命中附加）
+    this.updateCurse(dt);
+    // 缓行领域（进化Boss 复活后释放）
+    this.updateSlowField(dt);
+
+    // 移动：键盘 + 触控目标位置（Boss「极限」关支持上下左右，其余关卡仅左右）
+    const baseSpeed = 380;
+    const speed = baseSpeed * (this.slowFieldActive > 0 ? this.slowFactor : 1);
+    let dir = 0;
+    let vdir = 0;
+    if (this.keys.has('ArrowLeft') || this.keys.has('a') || this.keys.has('A')) dir -= 1;
+    if (this.keys.has('ArrowRight') || this.keys.has('d') || this.keys.has('D')) dir += 1;
+    if (this.bossPhase === 'extreme' || this.bossPhase === 'reaper') {
+      if (this.keys.has('ArrowUp') || this.keys.has('w') || this.keys.has('W')) vdir -= 1;
+      if (this.keys.has('ArrowDown') || this.keys.has('s') || this.keys.has('S')) vdir += 1;
+    }
+    // 被黑洞吸入定身期间无法移动
+    if (this.stunTimer > 0) {
+      this.stunTimer = Math.max(0, this.stunTimer - dt);
+    } else {
+      p.x += dir * speed * dt;
+      p.y += vdir * speed * dt;
+    }
+    // 触控移动：定身期间同样无法移动主角
+    if (this.stunTimer <= 0) {
+      if (this.touchX !== null) {
+        const target = this.touchX;
+        const dx = target - p.x;
+        const step = Math.sign(dx) * Math.min(Math.abs(dx), speed * dt);
+        p.x += step;
+      }
+      if ((this.bossPhase === 'extreme' || this.bossPhase === 'reaper') && this.touchY !== null) {
+        // Boss「极限」/「死神」关：触控上下移动主角
+        const dy = this.touchY - p.y;
+        const stepY = Math.sign(dy) * Math.min(Math.abs(dy), speed * dt);
+        p.y += stepY;
+      }
+    }
+    const half = p.w / 2;
+    p.x = Math.max(half, Math.min(this.W - half, p.x));
+    if (this.bossPhase === 'extreme' || this.bossPhase === 'reaper') {
+      // Boss「极限」/「死神」关：主角可上下移动，限制在屏幕内
+      p.y = Math.max(half + 80, Math.min(this.H - half, p.y));
+    } else {
+      // 其余关卡：主角固定在底部附近，不做上下移动
+      const baseY = this.H - 150;
+      p.y += (baseY - p.y) * Math.min(1, dt * 4);
+    }
+
+    // 自动开火（空格/点击触发持续射击）；充能攻击降低射速 20%；进化Boss 复活金身期间 Boss 免疫伤害且不攻击（主角正常开火）
+    // 缓行领域中主角射速同步渐缓（冷却时长随缓行系数拉长）
+    const fireSlow = this.slowFieldActive > 0 ? this.slowFactor : 1;
+    const chargeActive = this.skillChargeActive > 0;
+    const effFireInterval = chargeActive ? this.fireInterval * SKILL_CHARGE_FIRE_MULT : this.fireInterval;
+    this.fireCd -= dt * fireSlow;
+    if ((this.shooting || this.autoFire) && this.fireCd <= 0) {
+      this.fireBullet(chargeActive);
+      this.fireCd = effFireInterval;
+      // 副武器枪线：主魔法弹发射时同步触发一次副武器独立冷却
+      if (this.weaponChosen) {
+        if (this.weaponFireCd <= 0) {
+          this.fireSecondaryBullet();
+          const w = SECONDARY_WEAPONS[this.weaponChosen];
+          this.weaponFireCd = w.interval;
+        }
+      }
+    }
+    if (this.weaponChosen && this.weaponFireCd > 0) {
+      this.weaponFireCd = Math.max(0, this.weaponFireCd - dt * fireSlow);
+    }
+
+    // 大招：向前射出两列子弹（额外平行弹幕），持续期间高频发射
+    if (this.skillUltActive > 0) {
+      this.ultFireTimer -= dt * fireSlow;
+      if (this.ultFireTimer <= 0) {
+        this.ultFireTimer = 0.12;
+        this.fireUltBullets();
+      }
+    }
+
+    // 难度曲线：随时间 + 波次强化，刷怪越来越快、下坠越来越快
+    const difficulty = Math.min(1, this.time / 90);
+    const waveBoost = this.waveLevel * 0.12; // 每波额外提速
+    this.spawnInterval = Math.max(0.35, 1.4 - difficulty * 0.9 - waveBoost); // 1.4s -> 更快
+    this.speedMul = 1 + difficulty * 0.9 + waveBoost;
+
+    // 被动卡牌效果：控制领域（低血降小怪移速 20%）/ 弹簧陷阱（20 怪时底端反弹）/ 破釜沉舟（低血+≥10 怪清屏）
+    this.updatePassives(dt);
+
+    // 波次强化闪光衰减
+    if (this.waveFlash > 0) this.waveFlash = Math.max(0, this.waveFlash - dt);
+
+    // 普通怪物刷新（Boss 关不刷普通怪，第 6 关进化Boss 不刷小怪）；关卡越高出怪越多
+    const spawnMonsters = !this.boss;
+    if (spawnMonsters) {
+      this.spawnTimer -= dt;
+      if (this.spawnTimer <= 0) {
+        // 基础刷 1 只；第 2 关起每关温和增加出怪量（+1/关，上限 +3），难度可控
+        const extra = Math.min(3, Math.max(0, this.stage - 1));
+        for (let k = 0; k <= extra; k++) this.spawnMonster(difficulty);
+        // 高波次时再额外多刷一只，制造节奏变化
+        if (this.waveLevel >= 2 && Math.random() < 0.4) this.spawnMonster(difficulty);
+        this.spawnTimer = this.spawnInterval * (0.7 + Math.random() * 0.6);
+      }
+      }
+    // 金币掉落与拾取（靠近玩家自动吸取）
+    for (let i = this.coins.length - 1; i >= 0; i--) {
+      const c = this.coins[i];
+      c.life -= dt;
+      c.y += c.vy * dt;
+      const dx = p.x - c.x;
+      const dy = p.y - c.y;
+      const dist = Math.hypot(dx, dy);
+      if (dist < 130) {
+        // 吸取：向玩家加速靠近
+        const pull = 620;
+        c.x += (dx / (dist || 1)) * pull * dt;
+        c.y += (dy / (dist || 1)) * pull * dt;
+      }
+      if (dist < p.w / 2 + 8) {
+        this.coins.splice(i, 1);
+        this.score += c.value;
+        this.addFloat(c.x, c.y, `+${c.value}`, '#ffd24a');
+        for (let k = 0; k < 5; k++) {
+          const a = Math.random() * Math.PI * 2;
+          this.particles.push({ x: c.x, y: c.y, vx: Math.cos(a) * 90, vy: Math.sin(a) * 90, life: 0.3, color: '#ffe27a', size: 3 });
+        }
+        continue;
+      }
+      if (c.life <= 0 || c.y > this.H + 20) this.coins.splice(i, 1);
+    }
+
+    // 子弹
+    for (let i = this.bullets.length - 1; i >= 0; i--) {
+      const b = this.bullets[i];
+      if (b.vx) b.x += b.vx * dt;
+      if (b.down) b.y += b.vy * dt;
+      else b.y -= b.vy * dt;
+      b.life -= dt;
+      if (b.fromBoss) {
+        // Boss 能量球命中玩家
+        const dx = b.x - p.x;
+        const dy = b.y - p.y;
+        if (dx * dx + dy * dy < (b.r + p.w / 2) * (b.r + p.w / 2)) {
+          this.bullets.splice(i, 1);
+          if (this.isInvincible()) {
+            this.addFloat(p.x, p.y - 50, '免疫', '#ffd24a');
+            continue;
+          }
+          this.hp -= b.dmg;
+          this.shake = 10;
+          this.addFloat(p.x, p.y - 50, `-${b.dmg} HP`, '#ff5a5a');
+          if (this.hp <= 0) {
+            this.hp = 0;
+            this.gameOver(false);
+            return;
+          }
+          continue;
+        }
+      }
+      if (b.y < -30 || b.y > this.H + 30 || b.life <= 0) this.bullets.splice(i, 1);
+    }
+
+    // 怪物
+    for (let i = this.monsters.length - 1; i >= 0; i--) {
+      const m = this.monsters[i];
+      if (!m.elite) {
+        m.y += m.speed * this.speedMul * dt;
+        m.x += Math.sin(this.time * 2 + m.phase) * m.wobble * dt;
+        m.x = Math.max(m.r, Math.min(this.W - m.r, m.x));
+      } else {
+        // 精英怪：不移动，周期性召唤小怪
+        m.summonCd -= dt;
+        if (m.summonCd <= 0) {
+          m.summonCd = ELITE_SUMMON_INTERVAL;
+          const count = 2 + Math.floor(Math.random() * 2); // 召唤 2~3 只小怪
+          for (let k = 0; k < count; k++) this.spawnMonster(difficulty);
+          this.addFloat(m.x, m.y - m.r - 16, '召唤！', '#ffb03c');
+        }
+      }
+      m.flash -= dt;
+
+      // 触底扣血（精英怪不移动，不会触底）
+      if (!m.elite && m.y + m.r >= this.H - 40) {
+        this.monsters.splice(i, 1);
+        if (this.isInvincible()) {
+          this.addFloat(p.x, p.y - 50, '免疫', '#ffd24a');
+          continue;
+        }
+        this.hp -= m.dmg;
+        this.shake = 8;
+        this.addFloat(p.x, p.y - 50, `-${m.dmg} HP`, '#ff5a5a');
+        if (this.hp <= 0) {
+          this.hp = 0;
+          this.gameOver(false);
+          return;
+        }
+        continue;
+      }
+
+      // 子弹碰撞
+      for (let j = this.bullets.length - 1; j >= 0; j--) {
+        const b = this.bullets[j];
+        if (b.fromBoss) continue;
+        const dx = b.x - m.x;
+        const dy = b.y - m.y;
+        if (dx * dx + dy * dy < (m.r + b.r) * (m.r + b.r)) {
+          this.bullets.splice(j, 1);
+          m.hp -= b.dmg;
+          m.flash = 0.1;
+          if (m.hp <= 0) {
+            this.killMonster(i);
+            break;
+          }
+        }
+      }
+    }
+
+    
+
+    // Boss 更新与碰撞
+    if (this.boss) {
+      this.updateBoss(dt);
+      const b = this.boss;
+      // 玩家子弹命中 Boss
+      for (let j = this.bullets.length - 1; j >= 0; j--) {
+        const bl = this.bullets[j];
+        if (bl.fromBoss) continue;
+        const dx = bl.x - b.x;
+        const dy = bl.y - b.y;
+        if (dx * dx + dy * dy < (b.r + bl.r) * (b.r + bl.r)) {
+          this.bullets.splice(j, 1);
+          // 进化Boss 金身期间免疫伤害
+          if (this.bossPhase === 'evolved' && this.evolvedInvulnRemaining > 0) {
+            this.addFloat(bl.x, bl.y, '免疫', '#7ee6ff');
+            continue;
+          }
+          b.hp -= bl.dmg;
+          b.flash = 0.1;
+          this.addFloat(bl.x, bl.y, `${bl.dmg}`, '#ffd24a');
+          if (b.hp <= 0) {
+            b.hp = 0;
+            if (this.bossPhase === 'boss') {
+              this.transformToPseudo();
+            } else if (this.bossPhase === 'extreme') {
+              // 击败 Boss「极限」-> 进入第 4 关小怪关（第 3 关结束后强制挑战）
+              this.boss = null;
+              this.bossPhase = 'normal';
+              this.killField = false;
+              this.bossHud.classList.add('hidden');
+              this.stage = 4;
+              this.enterNextStage();
+              return;
+            } else if (this.bossPhase === 'reaper') {
+              // 击败伪最终 Boss「死神」-> 进入第 6 关进化Boss关卡（第一阶段为精英怪形态，300 血）
+              this.spawnEvolvedBoss();
+              return;
+            } else if (this.bossPhase === 'evolved') {
+              if (b.evoPhase === 1) {
+                // 第一阶段（500 血）被打空 -> 清空场上残余小怪，Boss 满血进入第二阶段
+                this.monsters = [];
+                this.bossProjectiles = [];
+                b.evoPhase = 2;
+                b.maxHp = BOSS_EVOLVED.hp2;
+                b.hp = BOSS_EVOLVED.hp2; // 第二阶段：满血 300
+                b.flash = 0;
+                b.attackCd = 1.5;
+                // Boss 金身 3 秒：期间 Boss 不受伤害且不攻击（不再给主角金身）
+                this.evolvedInvulnRemaining = EVOLVED_RESPAWN_INVULN;
+                this.updateSkillBar();
+                this.slowFieldActive = EVOLVED_SLOW_DURATION; // 10s 全屏缓行领域
+                this.slowFieldElapsed = 0;
+                this.slowFieldBlockUsed = false; // 每次领域释放重置一次格挡
+                this.addFloat(this.W / 2, this.H / 2 - 60, '⚠ 进化Boss 进入第二阶段 · 缓行领域！', '#7ee6ff');
+                for (let i = 0; i < 24; i++) {
+                  const a = (i / 24) * Math.PI * 2;
+                  this.particles.push({ x: b.x, y: b.y, vx: Math.cos(a) * 320, vy: Math.sin(a) * 320, life: 0.5, color: '#7ee6ff', size: 5 });
+                }
+              } else {
+                // 第二阶段被击败 -> 播放第五幕告别剧情后通关胜利
+                this.boss = null;
+                this.bossPhase = 'normal';
+                this.bossProjectiles = [];
+                this.bossHud.classList.add('hidden');
+                this.showStory('victory', [
+                  { step: 5, text: '封印重新合拢了……深渊的风停了。做得好，孩子，真的做得好。' },
+                  { step: 5, text: '你已经从学徒成长为真正的魔法师。这世间的安宁，就交给你守护了。—— 你的导师，艾泽尔' },
+                ], () => this.gameOver(true));
+              }
+              return;
+            } else {
+              // 击败伪·永恒 -> 进入下一关小怪关（第 2~5 关），通关第 5 关进入最终 Boss「极限」
+              this.boss = null;
+              this.bossPhase = 'normal';
+              this.bossHud.classList.add('hidden');
+              // 第一次 Boss 关结束（击败伪·永恒）后弹出被动卡牌三选一，选择后再进入第 2 关
+              if (!this.passiveChosen) {
+                this.showPassiveSelect();
+                return;
+              }
+              this.enterNextStage();
+              return;
+            }
+            break;
+          }
+        }
+      }
+      if (this.boss) this.updateBossHud();
+    }
+
+    // Boss 登场提示计时
+    if (this.bossBanner > 0) this.bossBanner -= dt;
+
+    // 粒子
+    for (let i = this.particles.length - 1; i >= 0; i--) {
+      const pt = this.particles[i];
+      pt.x += pt.vx * dt;
+      pt.y += pt.vy * dt;
+      pt.vy += 300 * dt;
+      pt.life -= dt;
+      if (pt.life <= 0) this.particles.splice(i, 1);
+    }
+
+    // 漂浮文字
+    for (let i = this.floatingTexts.length - 1; i >= 0; i--) {
+      const ft = this.floatingTexts[i];
+      ft.y -= 40 * dt;
+      ft.life -= dt;
+      if (ft.life <= 0) this.floatingTexts.splice(i, 1);
+    }
+
+    if (this.shake > 0) this.shake = Math.max(0, this.shake - 30 * dt);
+
+    this.updateHud();
+    if (this.weaponChosen) this.updateWeaponPanel();
+    this.updateStageProgressHud();
+  }
+
+  spawnMonster(difficulty) {
+    const idx = Math.floor(Math.random() * MONSTER_TYPES.length);
+    const t = MONSTER_TYPES[idx];
+    const r = t.r;
+    // 怪物血量逐关加厚（第 1 关为基准，第 2 关起每关 +10%，逐关叠加）
+    const stageHpMul = 1 + Math.max(0, this.stage - 1) * 0.1;
+    const hp = Math.max(1, Math.round(t.hp * stageHpMul));
+    this.monsters.push({
+      type: t,
+      x: r + Math.random() * (this.W - r * 2),
+      y: -r,
+      r,
+      hp,
+      maxHp: hp,
+      speed: t.speed * (0.85 + Math.random() * 0.3),
+      exp: t.exp,
+      dmg: t.dmg,
+      wobble: 20 + difficulty * 40,
+      phase: Math.random() * Math.PI * 2,
+      flash: 0,
+    });
+  }
+
+  fireBullet(charged) {
+    const p = this.player;
+    const dmg = charged ? Math.round(this.damage * SKILL_CHARGE_DMG_MULT) : this.damage;
+    const slow = this.slowFieldActive > 0 ? this.slowFactor : 1;
+    this.bullets.push({
+      x: p.x,
+      y: p.y - p.h / 2,
+      vy: 520 * slow,
+      r: charged ? 13 : 9,
+      dmg,
+      life: 2,
+      charged: !!charged,
+    });
+  }
+
+  // 大招：向前射出两列平行能量球（单个伤害为当前伤害的 30%）
+  fireUltBullets() {
+    const p = this.player;
+    const off = p.w * 0.42;
+    const ultDmg = Math.max(1, Math.round(this.damage * 0.3 * 10) / 10);
+    const slow = this.slowFieldActive > 0 ? this.slowFactor : 1;
+    for (const dx of [-off, off]) {
+      this.bullets.push({
+        x: p.x + dx,
+        y: p.y - p.h / 2,
+        vy: 560 * slow,
+        r: 10,
+        dmg: ultDmg,
+        life: 2,
+        ult: true,
+      });
+    }
+  }
+
+  killMonster(index) {
+    const m = this.monsters[index];
+    this.monsters.splice(index, 1);
+    this.kills += 1;
+    this.score += m.exp * 10;
+    // 第 2、3、4、5 关：累计本关击杀进度，达成通关条件自动进入下一关（第 3 关后强制进入 Boss「极限」）
+    const goal = STAGE_KILL_GOAL[this.stage];
+    if (goal && !this.boss) {
+      this.stageKills += 1;
+      if (this.stageKills >= goal) {
+        this.addFloat(this.W / 2, this.H / 2 - 40, `第 ${this.stage} 关通关！`, '#ffd24a');
+        this.enterNextStage();
+      }
+    }
+    this.gainExp(m.exp);
+    // 爆裂粒子
+    for (let i = 0; i < 10; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const sp = 60 + Math.random() * 160;
+      this.particles.push({
+        x: m.x, y: m.y,
+        vx: Math.cos(a) * sp,
+        vy: Math.sin(a) * sp - 60,
+        life: 0.4 + Math.random() * 0.3,
+        color: m.type.img === ASSETS.monsterGreen ? '#7ee06a' : m.type.img === ASSETS.monsterPurple ? '#b58cff' : '#ff7a5a',
+        size: 3 + Math.random() * 4,
+      });
+    }
+    this.addFloat(m.x, m.y, `+${m.exp} EXP`, '#ffd24a');
+    // 掉落金币（可拾取加分）
+    const coinCount = 1 + (Math.random() < 0.35 ? 1 : 0);
+    for (let k = 0; k < coinCount; k++) {
+      const a = Math.random() * Math.PI * 2;
+      this.coins.push({
+        x: m.x + Math.cos(a) * 10,
+        y: m.y + Math.sin(a) * 10,
+        vx: 0,
+        vy: 60 + Math.random() * 60,
+        value: 5 + Math.floor(Math.random() * 6),
+        life: 6,
+      });
+    }
+  }
+
+  gainExp(amount) {
+    this.exp += amount;
+    while (this.exp >= this.expNeed) {
+      this.exp -= this.expNeed;
+      this.level += 1;
+      this.expNeed = Math.round(this.expNeed * 1.35);
+      // 攻击成长：第 1 关每升一级 +20%；第 2 关起每升一级 +1.5（初始攻击 5）
+      if (this.stage >= 2) {
+        this.damage = Math.round((this.damage + 1.5) * 100) / 100;
+      } else {
+        this.damage = Math.round((this.damage * 1.2) * 100) / 100;
+      }
+      this.fireInterval = Math.max(0.18, 0.5 - (this.level - 1) * 0.03);
+      this.maxHp += 1;
+      this.hp = this.maxHp;
+      this.addFloat(this.player.x, this.player.y - 60, `LEVEL UP! Lv.${this.level}`, '#6ee7ff');
+      // 每 10 级触发波次强化：怪物更快更多 + 全屏闪光提示
+      const newWave = Math.floor(this.level / 10);
+      if (newWave > this.waveLevel) {
+        this.waveLevel = newWave;
+        this.waveFlash = 0.9;
+        this.addFloat(this.W / 2, this.H / 2 - 20, `第 ${newWave} 波 · 强化来袭！`, '#ff9a5a');
+        for (let i = 0; i < 28; i++) {
+          const a = (i / 28) * Math.PI * 2;
+          this.particles.push({
+            x: this.W / 2, y: this.H / 2,
+            vx: Math.cos(a) * 360, vy: Math.sin(a) * 360,
+            life: 0.6, color: '#ffb03c', size: 5,
+          });
+        }
+      }
+      // 升级光环粒子
+      for (let i = 0; i < 16; i++) {
+        const a = (i / 16) * Math.PI * 2;
+        this.particles.push({
+          x: this.player.x, y: this.player.y,
+          vx: Math.cos(a) * 180, vy: Math.sin(a) * 180,
+          life: 0.5, color: '#6ee7ff', size: 4,
+        });
+      }
+      // 达到 Boss 等级触发 Boss 关（保持原有行为，不改变触发条件）
+      if (!this.bossTriggered && !this.boss && this.level >= BOSS_TRIGGER_LEVEL) {
+        this.bossTriggered = true;
+        this.spawnBoss();
+      }
+    }
+  }
+
+  addFloat(x, y, text, color) {
+    this.floatingTexts.push({ x, y, text, color, life: 1 });
+  }
+
+  updateHud() {
+    const set = (k, v) => {
+      const el = this.hud.querySelector(`[data-k="${k}"]`);
+      if (el) el.textContent = v;
+    };
+    set('lv', this.level);
+    set('dmg', this.damage);
+    set('kill', this.kills);
+    set('score', this.score);
+    const hpFill = this.hud.querySelector('.hp-fill');
+    const expFill = this.hud.querySelector('.exp-fill');
+    if (hpFill) hpFill.style.width = `${(this.hp / this.maxHp) * 100}%`;
+    if (expFill) expFill.style.width = `${(this.exp / this.expNeed) * 100}%`;
+  }
+
+  // ---------- 渲染 ----------
+  render() {
+    const ctx = this.ctx;
+    if (!ctx) return;
+    ctx.clearRect(0, 0, this.W, this.H);
+    ctx.save();
+    if (this.shake > 0) {
+      ctx.translate((Math.random() - 0.5) * this.shake, (Math.random() - 0.5) * this.shake);
+    }
+
+    // 背景
+    if (this.images.bg) {
+      const scale = Math.max(this.W / this.images.bg.width, this.H / this.images.bg.height);
+      const dw = this.images.bg.width * scale;
+      const dh = this.images.bg.height * scale;
+      ctx.drawImage(this.images.bg, (this.W - dw) / 2, (this.H - dh) / 2, dw, dh);
+    } else {
+      const g = ctx.createLinearGradient(0, 0, 0, this.H);
+      g.addColorStop(0, '#2a1a4a');
+      g.addColorStop(1, '#ff9a5a');
+      ctx.fillStyle = g;
+      ctx.fillRect(0, 0, this.W, this.H);
+    }
+
+    if (this.state === 'idle') {
+      ctx.restore();
+      return;
+    }
+
+    // 底部警戒线
+    ctx.strokeStyle = 'rgba(255,90,90,0.5)';
+    ctx.setLineDash([10, 8]);
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(0, this.H - 40);
+    ctx.lineTo(this.W, this.H - 40);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // 怪物
+    for (const m of this.monsters) {
+      const img = m.type.imgObj;
+      const size = m.r * 2.4;
+      if (img) {
+        ctx.globalAlpha = m.flash > 0 ? 0.6 : 1;
+        ctx.drawImage(img, m.x - size / 2, m.y - size / 2, size, size);
+        ctx.globalAlpha = 1;
+      } else {
+        ctx.fillStyle = m.type.img === ASSETS.monsterGreen ? '#7ee06a' : m.type.img === ASSETS.monsterPurple ? '#b58cff' : '#ff7a5a';
+        ctx.beginPath();
+        ctx.arc(m.x, m.y, m.r, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      // 血条
+      if (m.hp < m.maxHp) {
+        const bw = m.r * 1.6;
+        ctx.fillStyle = 'rgba(0,0,0,0.5)';
+        ctx.fillRect(m.x - bw / 2, m.y - m.r - 12, bw, 5);
+        ctx.fillStyle = '#ff5a5a';
+        ctx.fillRect(m.x - bw / 2, m.y - m.r - 12, bw * (m.hp / m.maxHp), 5);
+      }
+    }
+
+    // 陨石落点预警（预先标出位置与范围）
+    for (const m of this.meteors) {
+      const t = Math.max(0, m.warn / METEOR_WARNING); // 1 -> 0
+      const pulse = 0.5 + Math.sin(this.time * 8) * 0.2;
+      ctx.globalAlpha = 0.35 + pulse * 0.3;
+      ctx.strokeStyle = '#ff8a3c';
+      ctx.lineWidth = 4;
+      ctx.beginPath();
+      ctx.arc(m.x, m.y, m.r, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.globalAlpha = 0.18;
+      ctx.fillStyle = '#ff5a2a';
+      ctx.beginPath();
+      ctx.arc(m.x, m.y, m.r, 0, Math.PI * 2);
+      ctx.fill();
+      // 中心十字标记
+      ctx.globalAlpha = 0.7 + pulse * 0.3;
+      ctx.strokeStyle = '#ffd24a';
+      ctx.lineWidth = 3;
+      const c = 16;
+      ctx.beginPath();
+      ctx.moveTo(m.x - c, m.y); ctx.lineTo(m.x + c, m.y);
+      ctx.moveTo(m.x, m.y - c); ctx.lineTo(m.x, m.y + c);
+      ctx.stroke();
+      // 倒计时数字
+      ctx.globalAlpha = 1;
+      ctx.textAlign = 'center';
+      ctx.font = 'bold 22px system-ui, sans-serif';
+      ctx.fillStyle = '#fffbe0';
+      ctx.strokeStyle = 'rgba(0,0,0,0.7)';
+      ctx.lineWidth = 4;
+      const txt = m.warn.toFixed(1);
+      ctx.strokeText(txt, m.x, m.y - m.r - 12);
+      ctx.fillText(txt, m.x, m.y - m.r - 12);
+    }
+    ctx.globalAlpha = 1;
+
+    // 伪最终 Boss「死神」背景（随出场显现）
+    if (this.bossPhase === 'reaper' && this.bgReaperAlpha > 0) {
+      ctx.save();
+      ctx.globalAlpha = this.bgReaperAlpha * 0.55;
+      if (this.images.bgReaper) {
+        const scale = Math.max(this.W / this.images.bgReaper.width, this.H / this.images.bgReaper.height);
+        const dw = this.images.bgReaper.width * scale;
+        const dh = this.images.bgReaper.height * scale;
+        ctx.drawImage(this.images.bgReaper, (this.W - dw) / 2, (this.H - dh) / 2, dw, dh);
+      } else {
+        const g = ctx.createLinearGradient(0, 0, 0, this.H);
+        g.addColorStop(0, '#3a0a1a');
+        g.addColorStop(1, '#0a0410');
+        ctx.fillStyle = g;
+        ctx.fillRect(0, 0, this.W, this.H);
+      }
+      ctx.restore();
+    }
+
+    // Boss
+    if (this.boss) this.renderBoss(ctx);
+
+    // 死神黑洞（吸入判定窗口内显示）
+    if (this.reaperBlackhole) {
+      const bh = this.reaperBlackhole;
+      const pulse = 1 + Math.sin(this.time * 6) * 0.12;
+      const R = REAPER_BLACKHOLE_RADIUS * pulse;
+      const g = ctx.createRadialGradient(bh.x, bh.y, 0, bh.x, bh.y, R);
+      g.addColorStop(0, 'rgba(10,4,30,0.95)');
+      g.addColorStop(0.6, 'rgba(60,20,140,0.7)');
+      g.addColorStop(1, 'rgba(120,80,255,0)');
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.arc(bh.x, bh.y, R, 0, Math.PI * 2);
+      ctx.fill();
+      // 吸力旋涡线
+      ctx.strokeStyle = 'rgba(150,110,255,0.5)';
+      ctx.lineWidth = 2;
+      for (let i = 0; i < 4; i++) {
+        const a = this.time * 3 + (i / 4) * Math.PI * 2;
+        ctx.beginPath();
+        ctx.arc(bh.x, bh.y, R * 0.7, a, a + 1.2);
+        ctx.stroke();
+      }
+    }
+
+    // 死神裂缝 / 黑洞光线
+    for (const bm of this.reaperBeams) {
+      if (bm.rift) {
+        // 裂缝：紫色长条斩击
+        const ang = Math.atan2(bm.vy, bm.vx);
+        ctx.save();
+        ctx.translate(bm.x, bm.y);
+        ctx.rotate(ang);
+        const g = ctx.createLinearGradient(-40, 0, 40, 0);
+        g.addColorStop(0, 'rgba(181,140,255,0)');
+        g.addColorStop(0.5, '#e0c8ff');
+        g.addColorStop(1, 'rgba(181,140,255,0)');
+        ctx.fillStyle = g;
+        ctx.fillRect(-40, -bm.r, 80, bm.r * 2);
+        ctx.restore();
+      } else {
+        // 黑洞光线：紫红色光束
+        const g = ctx.createRadialGradient(bm.x, bm.y, 0, bm.x, bm.y, bm.r * 1.8);
+        g.addColorStop(0, '#fff');
+        g.addColorStop(0.5, '#9a6aff');
+        g.addColorStop(1, 'rgba(120,80,255,0)');
+        ctx.fillStyle = g;
+        ctx.beginPath();
+        ctx.arc(bm.x, bm.y, bm.r * 1.8, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
+    // 进化Boss 弹丸：橙色直线弹丸
+    for (const pr of this.bossProjectiles) {
+      const g = ctx.createRadialGradient(pr.x, pr.y, 0, pr.x, pr.y, pr.r * 1.6);
+      g.addColorStop(0, '#fff');
+      g.addColorStop(0.5, '#ff9a3c');
+      g.addColorStop(1, 'rgba(255,154,60,0)');
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.arc(pr.x, pr.y, pr.r * 1.6, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // 子弹
+    for (const b of this.bullets) {
+      if (b.fromBoss) {
+        const grad = ctx.createRadialGradient(b.x, b.y, 0, b.x, b.y, b.r * 1.8);
+        grad.addColorStop(0, '#fff0ff');
+        grad.addColorStop(0.5, '#ff5ad0');
+        grad.addColorStop(1, 'rgba(255,60,180,0)');
+        ctx.fillStyle = grad;
+        ctx.beginPath();
+        ctx.arc(b.x, b.y, b.r * 1.8, 0, Math.PI * 2);
+        ctx.fill();
+      } else if (b.ult) {
+        const grad = ctx.createRadialGradient(b.x, b.y, 0, b.x, b.y, b.r * 1.8);
+        grad.addColorStop(0, '#eafcff');
+        grad.addColorStop(0.5, '#6ee7ff');
+        grad.addColorStop(1, 'rgba(60,180,255,0)');
+        ctx.fillStyle = grad;
+        ctx.beginPath();
+        ctx.arc(b.x, b.y, b.r * 1.8, 0, Math.PI * 2);
+        ctx.fill();
+      } else if (b.secondary) {
+        const col = b.color || '#ffd24a';
+        const grad = ctx.createRadialGradient(b.x, b.y, 0, b.x, b.y, b.r * 2.2);
+        grad.addColorStop(0, '#ffffff');
+        grad.addColorStop(0.4, col);
+        grad.addColorStop(1, 'rgba(0,0,0,0)');
+        ctx.fillStyle = grad;
+        ctx.beginPath();
+        ctx.arc(b.x, b.y, b.r * 2.2, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = col;
+        ctx.fillRect(b.x - 2, b.y - 10, 4, 16);
+      } else if (b.charged) {
+        const grad = ctx.createRadialGradient(b.x, b.y, 0, b.x, b.y, b.r * 1.9);
+        grad.addColorStop(0, '#fffbe0');
+        grad.addColorStop(0.5, '#ff9a3c');
+        grad.addColorStop(1, 'rgba(255,120,30,0)');
+        ctx.fillStyle = grad;
+        ctx.beginPath();
+        ctx.arc(b.x, b.y, b.r * 1.9, 0, Math.PI * 2);
+        ctx.fill();
+      } else {
+        const grad = ctx.createRadialGradient(b.x, b.y, 0, b.x, b.y, b.r * 1.8);
+        grad.addColorStop(0, '#fffbe0');
+        grad.addColorStop(0.5, '#ffd24a');
+        grad.addColorStop(1, 'rgba(255,150,40,0)');
+        ctx.fillStyle = grad;
+        ctx.beginPath();
+        ctx.arc(b.x, b.y, b.r * 1.8, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
+    // 金币
+    for (const c of this.coins) {
+      const g = ctx.createRadialGradient(c.x - 2, c.y - 2, 1, c.x, c.y, 9);
+      g.addColorStop(0, '#fffbe0');
+      g.addColorStop(0.6, '#ffd24a');
+      g.addColorStop(1, '#c98a1a');
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.arc(c.x, c.y, 8, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(120,70,10,0.7)';
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+    }
+
+    // 治疗药水（程序化绘制：药水瓶形状，瞬时红色 / 缓慢绿色）
+    for (const pt of this.potions) {
+      const color = pt.type === 'instant' ? '#ff5a5a' : '#7ee6a0';
+      const glow = ctx.createRadialGradient(pt.x, pt.y, 2, pt.x, pt.y, 14);
+      glow.addColorStop(0, color);
+      glow.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = glow;
+      ctx.beginPath();
+      ctx.arc(pt.x, pt.y, 14, 0, Math.PI * 2);
+      ctx.fill();
+      // 瓶身
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      ctx.ellipse(pt.x, pt.y + 2, 6, 8, 0, 0, Math.PI * 2);
+      ctx.fill();
+      // 瓶颈
+      ctx.fillRect(pt.x - 2, pt.y - 8, 4, 6);
+      // 瓶口
+      ctx.fillStyle = '#fffbe0';
+      ctx.fillRect(pt.x - 3, pt.y - 10, 6, 3);
+      // 高光
+      ctx.fillStyle = 'rgba(255,255,255,0.5)';
+      ctx.beginPath();
+      ctx.ellipse(pt.x - 2, pt.y, 1.5, 3, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // 玩家
+    const p = this.player;
+    const heroImg = this.images.hero;
+    const hs = p.w * 1.3;
+    // 充能攻击：橙色能量光环
+    if (this.skillChargeActive > 0) {
+      const pulse = 0.5 + Math.sin(this.time * 8) * 0.5;
+      const cg = ctx.createRadialGradient(p.x, p.y, p.w * 0.3, p.x, p.y, p.w * 1.1);
+      cg.addColorStop(0, `rgba(255,176,60,${0.25 + pulse * 0.2})`);
+      cg.addColorStop(1, 'rgba(255,176,60,0)');
+      ctx.fillStyle = cg;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.w * 1.1, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    // 大招：青色双列弹幕光柱
+    if (this.skillUltActive > 0) {
+      const off = p.w * 0.42;
+      for (const dx of [-off, off]) {
+        const ug = ctx.createLinearGradient(0, p.y - p.h / 2, 0, 0);
+        ug.addColorStop(0, 'rgba(110,231,255,0.5)');
+        ug.addColorStop(1, 'rgba(110,231,255,0)');
+        ctx.fillStyle = ug;
+        ctx.fillRect(p.x + dx - 6, 0, 12, p.y - p.h / 2);
+      }
+    }
+    if (heroImg) {
+      ctx.drawImage(heroImg, p.x - hs / 2, p.y - hs / 2, hs, hs);
+    } else {
+      ctx.fillStyle = '#4aa8ff';
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.w / 2, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    // 绝对防御：金身金色发光护罩 + 倒计时
+    if (this.skillDefenseActive > 0) {
+      const pulse = 0.5 + Math.sin(this.time * 6) * 0.5;
+      const gg = ctx.createRadialGradient(p.x, p.y, p.w * 0.4, p.x, p.y, p.w * 1.25);
+      gg.addColorStop(0, `rgba(255,226,122,${0.35 + pulse * 0.25})`);
+      gg.addColorStop(0.7, `rgba(255,176,60,${0.25 + pulse * 0.2})`);
+      gg.addColorStop(1, 'rgba(255,176,60,0)');
+      ctx.fillStyle = gg;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.w * 1.25, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = `rgba(255,226,122,${0.6 + pulse * 0.4})`;
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.w * 0.95, 0, Math.PI * 2);
+      ctx.stroke();
+      // 金身剩余秒数
+      ctx.textAlign = 'center';
+      ctx.font = 'bold 18px system-ui, sans-serif';
+      ctx.fillStyle = '#fffbe0';
+      ctx.strokeStyle = 'rgba(0,0,0,0.6)';
+      ctx.lineWidth = 3;
+      const txt = String(Math.ceil(this.skillDefenseActive));
+      ctx.strokeText(txt, p.x, p.y - p.w / 2 - 12);
+      ctx.fillText(txt, p.x, p.y - p.w / 2 - 12);
+    }
+
+    // 粒子
+    for (const pt of this.particles) {
+      ctx.globalAlpha = Math.max(0, pt.life / 0.7);
+      ctx.fillStyle = pt.color;
+      ctx.fillRect(pt.x - pt.size / 2, pt.y - pt.size / 2, pt.size, pt.size);
+    }
+    ctx.globalAlpha = 1;
+
+    // 漂浮文字
+    ctx.textAlign = 'center';
+    ctx.font = 'bold 16px system-ui, sans-serif';
+    for (const ft of this.floatingTexts) {
+      ctx.globalAlpha = Math.max(0, ft.life);
+      ctx.fillStyle = ft.color;
+      ctx.strokeStyle = 'rgba(0,0,0,0.6)';
+      ctx.lineWidth = 3;
+      ctx.strokeText(ft.text, ft.x, ft.y);
+      ctx.fillText(ft.text, ft.x, ft.y);
+    }
+    ctx.globalAlpha = 1;
+
+    // Boss 登场横幅
+    if (this.bossBanner > 0) {
+      const a = Math.min(1, this.bossBanner / 0.5);
+      ctx.globalAlpha = a;
+      ctx.textAlign = 'center';
+      ctx.font = 'bold 40px system-ui, sans-serif';
+      ctx.fillStyle = this.bossPhase === 'pseudo' ? '#eafcff' : this.bossPhase === 'extreme' ? '#ff4a4a' : '#ff5ad0';
+      ctx.strokeStyle = 'rgba(0,0,0,0.7)';
+      ctx.lineWidth = 6;
+      ctx.strokeText(this.bossBannerText, this.W / 2, this.H / 2 - 80);
+      ctx.fillText(this.bossBannerText, this.W / 2, this.H / 2 - 80);
+      ctx.globalAlpha = 1;
+    }
+
+    // Eternity 全屏能量波表现（预警闪烁 + 命中冲击）
+    if (this.bossPhase === 'boss') {
+      if (this.waveWarning > 0) {
+        const t = 1 - this.waveWarning / WAVE_WARNING; // 0->1 蓄力进度
+        const pulse = 0.5 + Math.sin(t * Math.PI * 6) * 0.5;
+        ctx.fillStyle = `rgba(255,60,180,${0.18 + t * 0.35})`;
+        ctx.fillRect(0, 0, this.W, this.H);
+        // 四边能量汇聚
+        const edge = 30 + (1 - t) * 90;
+        const eg = ctx.createLinearGradient(0, 0, 0, this.H);
+        eg.addColorStop(0, `rgba(255,90,208,${0.7 * pulse})`);
+        eg.addColorStop(0.5, 'rgba(255,90,208,0)');
+        eg.addColorStop(1, `rgba(255,90,208,${0.7 * pulse})`);
+        ctx.fillStyle = eg;
+        ctx.fillRect(0, 0, this.W, edge);
+        ctx.fillRect(0, this.H - edge, this.W, edge);
+      } else {
+        // 命中瞬间的白闪（利用 shake 衰减作为强度）
+        const flash = Math.min(1, this.shake / 16);
+        if (flash > 0) {
+          ctx.fillStyle = `rgba(255,240,255,${flash * 0.6})`;
+          ctx.fillRect(0, 0, this.W, this.H);
+        }
+      }
+    }
+
+    // 波次强化全屏闪光提示
+    if (this.waveFlash > 0) {
+      const a = Math.min(1, this.waveFlash / 0.9);
+      ctx.fillStyle = `rgba(255,176,60,${a * 0.4})`;
+      ctx.fillRect(0, 0, this.W, this.H);
+      ctx.globalAlpha = a;
+      ctx.textAlign = 'center';
+      ctx.font = 'bold 34px system-ui, sans-serif';
+      ctx.fillStyle = '#ffe27a';
+      ctx.strokeStyle = 'rgba(0,0,0,0.7)';
+      ctx.lineWidth = 5;
+      ctx.strokeText(`第 ${this.waveLevel} 波`, this.W / 2, this.H / 2);
+      ctx.fillText(`第 ${this.waveLevel} 波`, this.W / 2, this.H / 2);
+      ctx.globalAlpha = 1;
+    }
+
+    // 杀戮领域：全屏暗红脉动 + 顶部封印提示（最终 Boss 半血启动）
+    if (this.killField) {
+      const pulse = 0.5 + Math.sin(this.time * 4) * 0.5;
+      const kg = ctx.createRadialGradient(this.W / 2, this.H / 2, this.H * 0.2, this.W / 2, this.H / 2, this.H * 0.75);
+      kg.addColorStop(0, 'rgba(80,0,0,0)');
+      kg.addColorStop(1, `rgba(140,0,0,${0.35 + pulse * 0.2})`);
+      ctx.fillStyle = kg;
+      ctx.fillRect(0, 0, this.W, this.H);
+      ctx.textAlign = 'center';
+      ctx.font = 'bold 22px system-ui, sans-serif';
+      ctx.fillStyle = `rgba(255,90,90,${0.7 + pulse * 0.3})`;
+      ctx.strokeStyle = 'rgba(0,0,0,0.7)';
+      ctx.lineWidth = 4;
+      ctx.strokeText('杀戮领域 · 技能封印中', this.W / 2, 110);
+      ctx.fillText('杀戮领域 · 技能封印中', this.W / 2, 110);
+    }
+
+    ctx.restore();
+  }
+
+  renderBoss(ctx) {
+    const b = this.boss;
+    const isPseudo = this.bossPhase === 'pseudo';
+    const isExtreme = this.bossPhase === 'extreme';
+    const isReaper = this.bossPhase === 'reaper';
+    const isEvolved = this.bossPhase === 'evolved';
+    // 第 6 关进化Boss：精英怪形态（复用野猪精灵图，加载失败降级为橙色能量体）
+    if (isEvolved) {
+      // 缓行领域视觉：全屏淡蓝色渐变 + 边缘脉冲
+      if (this.slowFieldActive > 0) {
+        const remain = this.slowFieldActive / EVOLVED_SLOW_DURATION;
+        const g = ctx.createRadialGradient(this.W / 2, this.H / 2, Math.min(this.W, this.H) * 0.2, this.W / 2, this.H / 2, Math.max(this.W, this.H) * 0.7);
+        g.addColorStop(0, 'rgba(126,230,255,0)');
+        g.addColorStop(1, `rgba(126,230,255,${0.18 * remain + 0.08})`);
+        ctx.fillStyle = g;
+        ctx.fillRect(0, 0, this.W, this.H);
+      }
+      const pulse = 1 + Math.sin(b.phase * 2.5) * 0.05;
+      const R = b.r * pulse;
+      // Boss 金身：金色发光护罩
+      if (this.evolvedInvulnRemaining > 0) {
+        const gInv = ctx.createRadialGradient(b.x, b.y, R * 0.9, b.x, b.y, R * 1.6);
+        gInv.addColorStop(0, 'rgba(255,210,74,0.05)');
+        gInv.addColorStop(1, `rgba(255,210,74,${0.35 + Math.sin(b.phase * 8) * 0.08})`);
+        ctx.fillStyle = gInv;
+        ctx.beginPath();
+        ctx.arc(b.x, b.y, R * 1.6, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      const halo = ctx.createRadialGradient(b.x, b.y, R * 0.2, b.x, b.y, R * 2.0);
+      halo.addColorStop(0, 'rgba(255,154,60,0.55)');
+      halo.addColorStop(0.6, 'rgba(180,90,30,0.35)');
+      halo.addColorStop(1, 'rgba(180,90,30,0)');
+      ctx.fillStyle = halo;
+      ctx.beginPath();
+      ctx.arc(b.x, b.y, R * 2.0, 0, Math.PI * 2);
+      ctx.fill();
+      if (this.images[ASSETS.eliteBoar]) {
+        const size = b.r * 2.4;
+        ctx.drawImage(this.images[ASSETS.eliteBoar], b.x - size / 2, b.y - size / 2, size, size);
+      } else {
+        const body = ctx.createRadialGradient(b.x - R * 0.3, b.y - R * 0.3, R * 0.1, b.x, b.y, R);
+        body.addColorStop(0, '#ffe0b0');
+        body.addColorStop(0.6, '#ff9a3c');
+        body.addColorStop(1, '#a04a10');
+        ctx.fillStyle = body;
+        ctx.beginPath();
+        ctx.arc(b.x, b.y, R, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      if (b.flash > 0) {
+        ctx.globalAlpha = 0.5;
+        ctx.fillStyle = '#ffffff';
+        ctx.beginPath();
+        ctx.arc(b.x, b.y, R, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.globalAlpha = 1;
+      }
+      return;
+    }
+    // 伪最终 Boss「死神」：使用专属精灵图（加载失败降级为镰刀能量体）
+    if (isReaper && this.images.bossReaper) {
+      const pulse = 1 + Math.sin(b.phase * 2.5) * 0.05;
+      const R = b.r * pulse;
+      const halo = ctx.createRadialGradient(b.x, b.y, R * 0.2, b.x, b.y, R * 2.0);
+      halo.addColorStop(0, 'rgba(255,74,74,0.55)');
+      halo.addColorStop(0.6, 'rgba(120,30,80,0.35)');
+      halo.addColorStop(1, 'rgba(120,30,80,0)');
+      ctx.fillStyle = halo;
+      ctx.beginPath();
+      ctx.arc(b.x, b.y, R * 2.0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.drawImage(this.images.bossReaper, b.x - R, b.y - R * 1.2, R * 2, R * 2.4);
+      ctx.restore();
+      return;
+    }
+    // 最终 Boss「极限」：使用专属精灵图（加载失败降级为能量球）
+    if (isExtreme && this.images.extreme) {
+      const pulse = 1 + Math.sin(b.phase * 3) * 0.06;
+      const R = b.r * pulse;
+      const halo = ctx.createRadialGradient(b.x, b.y, R * 0.2, b.x, b.y, R * 1.9);
+      halo.addColorStop(0, `rgba(255,74,74,${this.killField ? 0.65 : 0.4})`);
+      halo.addColorStop(1, 'rgba(255,74,74,0)');
+      ctx.fillStyle = halo;
+      ctx.beginPath();
+      ctx.arc(b.x, b.y, R * 1.9, 0, Math.PI * 2);
+      ctx.fill();
+      const size = b.r * 2.6;
+      ctx.drawImage(this.images.extreme, b.x - size / 2, b.y - size / 2, size, size);
+      if (b.flash > 0) {
+        ctx.globalAlpha = 0.5;
+        ctx.fillStyle = '#ffffff';
+        ctx.beginPath();
+        ctx.arc(b.x, b.y, R, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.globalAlpha = 1;
+      }
+      return;
+    }
+    const core = isPseudo ? '#eafcff' : '#b58cff';
+    const glow = isPseudo ? 'rgba(180,240,255,' : 'rgba(150,90,220,';
+    const pulse = 1 + Math.sin(b.phase * 3) * 0.08;
+    const R = b.r * pulse;
+    // 外层光晕
+    const halo = ctx.createRadialGradient(b.x, b.y, R * 0.2, b.x, b.y, R * 1.9);
+    halo.addColorStop(0, glow + '0.55)');
+    halo.addColorStop(1, glow + '0)');
+    ctx.fillStyle = halo;
+    ctx.beginPath();
+    ctx.arc(b.x, b.y, R * 1.9, 0, Math.PI * 2);
+    ctx.fill();
+    // 主体能量球
+    const body = ctx.createRadialGradient(b.x - R * 0.3, b.y - R * 0.3, R * 0.1, b.x, b.y, R);
+    body.addColorStop(0, isPseudo ? '#ffffff' : '#f0d8ff');
+    body.addColorStop(0.6, core);
+    body.addColorStop(1, isPseudo ? '#9fd8f0' : '#5a2a9a');
+    ctx.fillStyle = body;
+    ctx.beginPath();
+    ctx.arc(b.x, b.y, R, 0, Math.PI * 2);
+    ctx.fill();
+    // 核心眼睛
+    ctx.fillStyle = isPseudo ? '#ffffff' : '#ffe0ff';
+    ctx.beginPath();
+    ctx.arc(b.x, b.y, R * 0.32, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = isPseudo ? '#2a6a9a' : '#3a0a5a';
+    ctx.beginPath();
+    ctx.arc(b.x, b.y, R * 0.16, 0, Math.PI * 2);
+    ctx.fill();
+    // 受击闪白
+    if (b.flash > 0) {
+      ctx.globalAlpha = 0.5;
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath();
+      ctx.arc(b.x, b.y, R, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.globalAlpha = 1;
+    }
+    // 伪·永恒蓄力预警：向玩家汇聚的蓝色能量环 + 准星连线
+    if (isPseudo && this.pseudoCharge > 0) {
+      const t = 1 - this.pseudoCharge / PSEUDO_CHARGE; // 0->1 蓄力进度
+      const p = this.player;
+      // 指向玩家的光束线（逐渐变亮）
+      ctx.strokeStyle = `rgba(126,230,255,${0.2 + t * 0.7})`;
+      ctx.lineWidth = 3 + t * 8;
+      ctx.beginPath();
+      ctx.moveTo(b.x, b.y);
+      ctx.lineTo(p.x, p.y);
+      ctx.stroke();
+      // 中心汇聚的能量环
+      const ringR = R * (1.9 - t * 1.4);
+      ctx.strokeStyle = `rgba(126,230,255,${0.4 + t * 0.6})`;
+      ctx.lineWidth = 4;
+      ctx.beginPath();
+      ctx.arc(b.x, b.y, ringR, 0, Math.PI * 2);
+      ctx.stroke();
+      // 核心变亮
+      ctx.fillStyle = `rgba(255,255,255,${t * 0.8})`;
+      ctx.beginPath();
+      ctx.arc(b.x, b.y, R * 0.5, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  // ---------- 输入 ----------
+  onKeyDown = (e) => {
+    const k = e.key;
+    if (k === 'ArrowLeft' || k === 'ArrowRight' || k === 'ArrowUp' || k === 'ArrowDown' || k === 'a' || k === 'A' || k === 'd' || k === 'D' || k === 'w' || k === 'W' || k === 's' || k === 'S') {
+      this.keys.add(k);
+      e.preventDefault();
+    }
+    if (k === ' ' || k === 'Spacebar') {
+      e.preventDefault();
+      if (this.state === 'playing') this.shooting = true;
+    }
+    // 技能快捷键：1 绝对防御 / 2 充能攻击 / 3 大招
+    if (this.state === 'playing') {
+      if (k === '1') this.useSkill('defense');
+      else if (k === '2') this.useSkill('charge');
+      else if (k === '3') this.useSkill('ult');
+    }
+  };
+
+  onKeyUp = (e) => {
+    const k = e.key;
+    if (k === 'ArrowLeft' || k === 'ArrowRight' || k === 'ArrowUp' || k === 'ArrowDown' || k === 'a' || k === 'A' || k === 'd' || k === 'D' || k === 'w' || k === 'W' || k === 's' || k === 'S') {
+      this.keys.delete(k);
+    }
+    if (k === ' ' || k === 'Spacebar') this.shooting = false;
+  };
+
+  canvasPos(e) {
+    const rect = this.canvas.getBoundingClientRect();
+    return e.clientX - rect.left;
+  }
+
+  canvasPosY(e) {
+    const rect = this.canvas.getBoundingClientRect();
+    return e.clientY - rect.top;
+  }
+
+  onPointerDown = (e) => {
+    if (this.state !== 'playing') return;
+    this.touchX = this.canvasPos(e);
+    if (this.bossPhase === 'extreme' || this.bossPhase === 'reaper') this.touchY = this.canvasPosY(e);
+    this.autoFire = true;
+    try { this.canvas.setPointerCapture(e.pointerId); } catch (_) {}
+  };
+
+  onPointerMove = (e) => {
+    if (this.state !== 'playing' || !this.autoFire && this.touchX === null) return;
+    if (e.pointerType === 'touch' || this.touchX !== null) {
+      this.touchX = this.canvasPos(e);
+      if (this.bossPhase === 'extreme' || this.bossPhase === 'reaper') this.touchY = this.canvasPosY(e);
+    }
+  };
+
+  onPointerUp = () => {
+    this.autoFire = false;
+    this.touchX = null;
+    this.touchY = null;
+  };
+
+  destroy() {
+    cancelAnimationFrame(this.raf);
+    window.removeEventListener('keydown', this.onKeyDown);
+    window.removeEventListener('keyup', this.onKeyUp);
+    this.canvas.removeEventListener('pointerdown', this.onPointerDown);
+    this.canvas.removeEventListener('pointermove', this.onPointerMove);
+    window.removeEventListener('pointerup', this.onPointerUp);
+    window.removeEventListener('pointercancel', this.onPointerUp);
+  }
+}
+
+// 装配入口：挂载游戏到 #app
+
+const app = document.getElementById('app');
+const game = new Game(app);
+window.__game = game;
+</script>
+
+
+</body></html>
